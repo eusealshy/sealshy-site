@@ -1,10 +1,23 @@
 <!DOCTYPE html>
 <!--
-  Got an idea that won't leave you alone?
-  Let's turn it into something real — say hello:
-  https://x.com/eusealshy · https://instagram.com/eusealshy
+╔══════════════════════════════════════════════╗
+║                                              ║
+║              ✦  S E A L S H Y  ✦             ║
+║                   ( ● )                      ║
+║                  /|||||\                     ║
+║                                              ║
+║         Ideas deserve gravity.               ║
+║   Want to turn yours into something real?    ║
+║                                              ║
+║      Don't just inspect the void.            ║
+║               Reach out.                     ║
+║                                              ║
+║   >  x.com/eusealshy                         ║
+║   >  instagram.com/eusealshy                 ║
+║                                              ║
+╚══════════════════════════════════════════════╝
 -->
-<html lang="en" data-build="1789224522">
+<html lang="en" data-build="1789224680">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
@@ -178,33 +191,30 @@
   <script>
 
     // ——— edit these (shows in DevTools Console) ———
-    const DEV_NOTES = {
-      headline: "Ideas deserve gravity.",
-      sub: "Want to turn yours into something real?",
-      cta: "Don't just inspect the void — reach out.",
-      contact: "→  https://x.com/eusealshy   ·   https://instagram.com/eusealshy",
-    };
+    const DEV_NOTES_ASCII = `
+╔══════════════════════════════════════════════╗
+║                                              ║
+║              ✦  S E A L S H Y  ✦             ║
+║                   ( ● )                      ║
+║                  /|||||\\                     ║
+║                                              ║
+║         Ideas deserve gravity.               ║
+║   Want to turn yours into something real?    ║
+║                                              ║
+║      Don't just inspect the void.            ║
+║               Reach out.                     ║
+║                                              ║
+║   >  x.com/eusealshy                         ║
+║   >  instagram.com/eusealshy                 ║
+║                                              ║
+╚══════════════════════════════════════════════╝
+`;
     (function greetDev() {
       if (typeof console === "undefined" || !console.log) return;
-      const ink = "#1a1814";
-      const bg = "#e8dfd0";
-      const mute = "#5c5348";
       try {
         console.log(
-          "%c" + DEV_NOTES.headline,
-          "font-family: Georgia, 'Instrument Serif', serif; font-size: 32px; font-weight: 400; letter-spacing: -0.02em; color: " + ink + "; background: " + bg + "; padding: 16px 20px 6px; border-radius: 10px 10px 0 0;"
-        );
-        console.log(
-          "%c" + DEV_NOTES.sub,
-          "font-family: Inter, system-ui, sans-serif; font-size: 14px; font-weight: 500; color: " + ink + "; background: " + bg + "; padding: 4px 20px 8px;"
-        );
-        console.log(
-          "%c" + DEV_NOTES.cta,
-          "font-family: Inter, system-ui, sans-serif; font-size: 12px; color: " + mute + "; background: " + bg + "; padding: 0 20px 10px;"
-        );
-        console.log(
-          "%c" + DEV_NOTES.contact,
-          "font-family: Inter, system-ui, sans-serif; font-size: 12px; font-weight: 600; color: " + ink + "; background: " + bg + "; padding: 10px 20px 16px; border-radius: 0 0 10px 10px;"
+          "%c" + DEV_NOTES_ASCII,
+          "font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.35; color: #e8dfd0; background: #1a1814; padding: 12px 14px; border-radius: 8px;"
         );
       } catch (_) {}
     })();
