@@ -243,6 +243,7 @@
     }
 
     function cacheBases() {
+      title.style.transform = "none";
       const els = [...chars, ...softPull];
       els.forEach((el) => {
         el.style.transform = "none";
@@ -251,6 +252,8 @@
         el.style.textShadow = "none";
       });
       void title.offsetWidth;
+      const tr = title.getBoundingClientRect();
+      basePos.set(title, { x: tr.left + tr.width / 2, y: tr.top + tr.height / 2 });
       els.forEach((el) => {
         const r = el.getBoundingClientRect();
         basePos.set(el, { x: r.left + r.width / 2, y: r.top + r.height / 2 });
@@ -327,20 +330,11 @@
       return Math.max(0, 1 - dist / near);
     }
 
-    const smoothN = new Map(); // release lag ~0.2s
-    const RELEASE_LAG = 0.2;
+    const smoothN = new Map();
+    const RELEASE_LAG = 0.4;
 
-    function pullAndDecay(el, strength, isChar, dt) {
-      const base = basePos.get(el);
-      if (!base) return 0;
-      const dx = bx - base.x;
-      const dy = by - base.y;
-      const dist = Math.hypot(dx, dy) || 1;
-      const reach = Math.hypot(w, h) || 1;
-      const t = Math.max(0, 1 - dist / reach);
-      const target = nearFactor(dist);
+    function smoothNear(el, target, dt) {
       let n = smoothN.get(el) || 0;
-      // approach fast, release with ~0.2s lag
       if (target >= n) {
         n += (target - n) * Math.min(1, (dt || 0.016) / 0.06);
       } else {
@@ -349,46 +343,88 @@
       }
       if (n < 0.001) n = 0;
       smoothN.set(el, n);
+      return n;
+    }
 
-      const force = t * strength * (hot ? 1.25 : 1);
+    function applyTitlePull(dt) {
+      const tb = basePos.get(title);
+      if (!tb) return;
+      const dx = bx - tb.x;
+      const dy = by - tb.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const reach = Math.hypot(w, h) || 1;
+      const t = Math.max(0, 1 - dist / reach);
+      const force = t * 17.5 * (hot ? 1.25 : 1);
       const ox = (dx / dist) * force;
       const oy = (dy / dist) * force;
+      title.style.transform =
+        "translate(" + ox.toFixed(2) + "px," + oy.toFixed(2) + "px)";
+    }
 
-      const blur = n * (isChar ? 1.55 : 0.9);
+    // Per-letter: decay/shake/zoom only — NO big lateral pull (avoids overlap)
+    function decayLetter(el, index, dt) {
+      const base = basePos.get(el);
+      if (!base) return 0;
+      const dx = bx - base.x;
+      const dy = by - base.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const n = smoothNear(el, nearFactor(dist), dt);
+
+      const blur = n * 1.55;
       const darken = n * 0.36;
-      const opac = 1 - n * (isChar ? 0.38 : 0.26);
-      const zoom = 1 - n * (isChar ? 0.18 : 0.1);
-      const stretchX = 1 + n * 0.07;
-      const skew = (dx / dist) * n * 6;
-      const rot = (isChar ? (Math.sin(dist * 0.05) * n * 5) : 0);
-      const zoomKick = n * n * (isChar ? 10 : 5);
-      // light shake while being sucked
-      const shakeAmp = n * n * (isChar ? 1.8 : 0.7);
-      const shx = (Math.sin(performance.now() * 0.045 + base.x * 0.2) +
-        Math.sin(performance.now() * 0.09 + base.y)) * shakeAmp;
-      const shy = (Math.cos(performance.now() * 0.052 + base.y * 0.15) +
-        Math.sin(performance.now() * 0.07)) * shakeAmp * 0.85;
-      const zx = ox + (dx / dist) * zoomKick + shx;
-      const zy = oy + (dy / dist) * zoomKick + shy;
+      const opac = 1 - n * 0.38;
+      const zoom = 1 - n * 0.14;
+      // tiny toward-hole only on Y-ish scale, keep X spacing intact
+      const local = n * n * 4;
+      const lx = (dx / dist) * local * 0.25; // was huge before — capped
+      const ly = (dy / dist) * local;
+
+      const shakeAmp = n * n * 1.6;
+      const now = performance.now();
+      const shx = Math.sin(now * 0.05 + index * 1.7) * shakeAmp;
+      const shy = Math.cos(now * 0.062 + index * 1.3) * shakeAmp * 0.8;
+      const rot = Math.sin(now * 0.04 + index) * n * 2.5;
 
       el.style.transform =
-        "translate(" + zx.toFixed(2) + "px," + zy.toFixed(2) + "px) " +
-        "scale(" + (zoom * stretchX).toFixed(4) + "," + zoom.toFixed(4) + ") " +
-        "skewX(" + skew.toFixed(2) + "deg) rotate(" + rot.toFixed(2) + "deg)";
+        "translate(" + (lx + shx).toFixed(2) + "px," + (ly + shy).toFixed(2) + "px) " +
+        "scale(" + zoom.toFixed(4) + ") rotate(" + rot.toFixed(2) + "deg)";
       el.style.filter =
         "blur(" + blur.toFixed(2) + "px) brightness(" + (1 - darken).toFixed(3) + ") contrast(" +
         (1 + n * 0.22).toFixed(3) + ")";
-      el.style.opacity = Math.max(0.58, opac).toFixed(3);
+      el.style.opacity = Math.max(0.62, opac).toFixed(3);
       if (n > 0.05) {
-        const sh = (n * 2.8).toFixed(1);
+        const sh = (n * 2.4).toFixed(1);
         el.style.textShadow =
-          sh + "px 0 0 rgba(40,34,28," + (0.22 * n).toFixed(2) + "), " +
-          "-" + sh + "px 0 0 rgba(20,18,16," + (0.18 * n).toFixed(2) + "), " +
-          "0 0 " + (n * 14).toFixed(1) + "px rgba(0,0,0," + (0.28 * n).toFixed(2) + ")";
+          sh + "px 0 0 rgba(40,34,28," + (0.2 * n).toFixed(2) + "), " +
+          "-" + sh + "px 0 0 rgba(20,18,16," + (0.16 * n).toFixed(2) + "), " +
+          "0 0 " + (n * 12).toFixed(1) + "px rgba(0,0,0," + (0.25 * n).toFixed(2) + ")";
       } else {
         el.style.textShadow = "none";
       }
       return n;
+    }
+
+    function pullLink(el, dt) {
+      const base = basePos.get(el);
+      if (!base) return;
+      const dx = bx - base.x;
+      const dy = by - base.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const reach = Math.hypot(w, h) || 1;
+      const t = Math.max(0, 1 - dist / reach);
+      const n = smoothNear(el, nearFactor(dist), dt);
+      const force = t * 11.25 * (hot ? 1.25 : 1);
+      const ox = (dx / dist) * force;
+      const oy = (dy / dist) * force;
+      const blur = n * 0.9;
+      const zoom = 1 - n * 0.1;
+      el.style.transform =
+        "translate(" + ox.toFixed(2) + "px," + oy.toFixed(2) + "px) scale(" + zoom.toFixed(4) + ")";
+      el.style.filter =
+        "blur(" + blur.toFixed(2) + "px) brightness(" + (1 - n * 0.28).toFixed(3) + ")";
+      // keep link hover opacity logic via CSS; floor when sucked
+      if (n > 0.02) el.style.opacity = Math.max(0.55, 1 - n * 0.22).toFixed(3);
+      else el.style.opacity = "";
     }
 
     let lastTs = 0;
@@ -442,11 +478,12 @@
       ctx.ellipse(bx, by, 58.5 * boost, 18 * boost, -0.2, 0, Math.PI * 2);
       ctx.stroke();
 
+      applyTitlePull(dt);
       let letterSuck = 0;
-      chars.forEach((el) => {
-        letterSuck = Math.max(letterSuck, pullAndDecay(el, 17.5, true, dt));
+      chars.forEach((el, i) => {
+        letterSuck = Math.max(letterSuck, decayLetter(el, i, dt));
       });
-      softPull.forEach((el) => pullAndDecay(el, 11.25, false, dt));
+      softPull.forEach((el) => pullLink(el, dt));
 
       const dustCount = Math.min(
         DUST_MAX,
