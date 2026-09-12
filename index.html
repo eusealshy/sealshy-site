@@ -168,7 +168,7 @@
     let w = 0, h = 0, dpr = 1;
     let mx = 0, my = 0, bx = 0, by = 0;
     let hot = 0;
-    let drawing = false;
+    let inkX = 0, inkY = 0, hasInk = false;
     let lastX = 0, lastY = 0;
     const dust = [];
     const DUST = 107;
@@ -239,14 +239,9 @@
       document.fonts.ready.then(cacheBases);
     }
 
-    function overLink(el) {
-      return !!(el && el.closest && el.closest("nav a"));
-    }
-
     function strokeTo(x, y) {
       dctx.strokeStyle = PEN;
-      dctx.fillStyle = PEN;
-      dctx.lineWidth = 2.2;
+      dctx.lineWidth = 2.0;
       dctx.lineCap = "round";
       dctx.lineJoin = "round";
       dctx.beginPath();
@@ -257,28 +252,15 @@
       lastY = y;
     }
 
-    window.addEventListener("pointerdown", (e) => {
-      if (overLink(e.target)) return;
-      drawing = true;
-      lastX = e.clientX;
-      lastY = e.clientY;
-      dctx.fillStyle = PEN;
-      dctx.beginPath();
-      dctx.arc(lastX, lastY, 1.1, 0, Math.PI * 2);
-      dctx.fill();
-      try { e.target.setPointerCapture(e.pointerId); } catch (_) {}
-    });
-
-    window.addEventListener("pointerup", () => { drawing = false; });
-    window.addEventListener("pointercancel", () => { drawing = false; });
-
     window.addEventListener("pointermove", (e) => {
       mx = e.clientX;
       my = e.clientY;
       cursorEl.style.left = mx + "px";
       cursorEl.style.top = my + "px";
-      if (drawing && !overLink(e.target)) {
-        strokeTo(mx, my);
+      if (!hasInk) {
+        inkX = lastX = mx;
+        inkY = lastY = my;
+        hasInk = true;
       }
     });
 
@@ -341,9 +323,23 @@
       }
     }
 
-    function frame() {
+    let lastTs = 0;
+    function frame(ts) {
+      if (!lastTs) lastTs = ts;
+      const dt = Math.min(0.05, (ts - lastTs) / 1000);
+      lastTs = ts;
+
       bx += (mx - bx) * 0.1;
       by += (my - by) * 0.1;
+
+      // ~0.1s lag on ink trail (clean follow)
+      if (hasInk) {
+        const k = 1 - Math.exp(-dt / 0.1);
+        inkX += (mx - inkX) * k;
+        inkY += (my - inkY) * k;
+        const dist = Math.hypot(inkX - lastX, inkY - lastY);
+        if (dist > 0.4) strokeTo(inkX, inkY);
+      }
 
       ctx.clearRect(0, 0, w, h);
 
