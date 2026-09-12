@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-build="1789182764">
+<html lang="en" data-build="1789183568">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
@@ -142,7 +142,7 @@
       background: rgba(26, 24, 20, 0.4);
       transition: transform 0.2s ease, background 0.2s ease;
     }
-    .draw-toggle[aria-checked="true"] .knob {
+    .draw-toggle[aria-checked="false"] .knob {
       background: rgba(26, 24, 20, 0.12);
       border-color: rgba(26, 24, 20, 0.45);
     }
@@ -181,7 +181,7 @@
     const PEN = "rgba(26, 24, 20, 0.72)";
     const LINE_W = 1.65;
     const INK_LAG = 0.1;
-    let drawEnabled = true;
+    let drawEnabled = false;
     let dprDraw = 1;
     const RELEASE_LAG = 0.4;
     const NEAR = 200;
