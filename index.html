@@ -17,7 +17,7 @@
 ║                                              ║
 ╚══════════════════════════════════════════════╝
 -->
-<html lang="en" data-build="1789224680">
+<html lang="en" data-build="1789224799">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
@@ -212,9 +212,11 @@
     (function greetDev() {
       if (typeof console === "undefined" || !console.log) return;
       try {
+        // one log, trimmed — no empty black pills above/below
+        const msg = String(DEV_NOTES_ASCII).replace(/^\s+|\s+$/g, "");
         console.log(
-          "%c" + DEV_NOTES_ASCII,
-          "font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.35; color: #e8dfd0; background: #1a1814; padding: 12px 14px; border-radius: 8px;"
+          "%c" + msg,
+          "font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.35; color: #e8dfd0; background: #1a1814; padding: 12px 14px; border-radius: 8px; white-space: pre;"
         );
       } catch (_) {}
     })();
