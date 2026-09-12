@@ -169,7 +169,7 @@
     let mx = 0, my = 0, bx = 0, by = 0;
     let hot = 0;
     const dust = [];
-    const DUST = 93; // was 70 (+33%)
+    const DUST = 107; // ~+15% over prior
     const basePos = new Map();
 
     function resize() {
@@ -243,7 +243,7 @@
 
     function nearFactor(dist) {
       // strong only when close to the well
-      const near = 170;
+      const near = 190;
       return Math.max(0, 1 - dist / near);
     }
 
@@ -260,29 +260,34 @@
       const ox = (dx / dist) * force;
       const oy = (dy / dist) * force;
 
-      // deterioration toward black hole (still readable)
-      const blur = n * (isChar ? 1.15 : 0.7);
-      const darken = n * 0.28;
-      const opac = 1 - n * (isChar ? 0.32 : 0.22);
-      const squash = 1 - n * 0.06;
-      const stretchX = 1 + n * 0.04;
-      const skew = (dx / dist) * n * 4;
-      const rot = (isChar ? (Math.sin(dist * 0.05) * n * 3) : 0);
+      // stronger "falling into hole" zoom (still readable)
+      const blur = n * (isChar ? 1.55 : 0.9);
+      const darken = n * 0.36;
+      const opac = 1 - n * (isChar ? 0.38 : 0.26);
+      // zoom into the hole: shrink + pull perspective
+      const zoom = 1 - n * (isChar ? 0.18 : 0.1);
+      const stretchX = 1 + n * 0.07;
+      const skew = (dx / dist) * n * 6;
+      const rot = (isChar ? (Math.sin(dist * 0.05) * n * 5) : 0);
+      // extra toward-hole kick when near
+      const zoomKick = n * n * (isChar ? 10 : 5);
+      const zx = ox + (dx / dist) * zoomKick;
+      const zy = oy + (dy / dist) * zoomKick;
 
       el.style.transform =
-        "translate(" + ox.toFixed(2) + "px," + oy.toFixed(2) + "px) " +
-        "scale(" + (squash * stretchX).toFixed(4) + "," + squash.toFixed(4) + ") " +
+        "translate(" + zx.toFixed(2) + "px," + zy.toFixed(2) + "px) " +
+        "scale(" + (zoom * stretchX).toFixed(4) + "," + zoom.toFixed(4) + ") " +
         "skewX(" + skew.toFixed(2) + "deg) rotate(" + rot.toFixed(2) + "deg)";
       el.style.filter =
         "blur(" + blur.toFixed(2) + "px) brightness(" + (1 - darken).toFixed(3) + ") contrast(" +
-        (1 + n * 0.15).toFixed(3) + ")";
-      el.style.opacity = Math.max(0.62, opac).toFixed(3);
+        (1 + n * 0.22).toFixed(3) + ")";
+      el.style.opacity = Math.max(0.58, opac).toFixed(3);
       if (n > 0.05) {
-        const sh = (n * 2.2).toFixed(1);
+        const sh = (n * 2.8).toFixed(1);
         el.style.textShadow =
-          sh + "px 0 0 rgba(40,34,28," + (0.18 * n).toFixed(2) + "), " +
-          "-" + sh + "px 0 0 rgba(20,18,16," + (0.14 * n).toFixed(2) + "), " +
-          "0 0 " + (n * 10).toFixed(1) + "px rgba(0,0,0," + (0.2 * n).toFixed(2) + ")";
+          sh + "px 0 0 rgba(40,34,28," + (0.22 * n).toFixed(2) + "), " +
+          "-" + sh + "px 0 0 rgba(20,18,16," + (0.18 * n).toFixed(2) + "), " +
+          "0 0 " + (n * 14).toFixed(1) + "px rgba(0,0,0," + (0.28 * n).toFixed(2) + ")";
       } else {
         el.style.textShadow = "none";
       }
@@ -295,7 +300,7 @@
       ctx.clearRect(0, 0, w, h);
 
       const boost = hot ? 1.2 : 1;
-      const R = 275 * boost;
+      const R = 206 * boost;
 
       ctx.globalCompositeOperation = "multiply";
       const well = ctx.createRadialGradient(bx, by, 0, bx, by, R);
@@ -307,23 +312,23 @@
       ctx.fillRect(0, 0, w, h);
 
       ctx.globalCompositeOperation = "source-over";
-      const core = ctx.createRadialGradient(bx, by, 0, bx, by, 42 * boost);
+      const core = ctx.createRadialGradient(bx, by, 0, bx, by, 31.5 * boost);
       core.addColorStop(0, "rgba(10, 9, 8, " + (0.55 * boost) + ")");
       core.addColorStop(0.55, "rgba(20, 18, 16, 0.2)");
       core.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = core;
       ctx.beginPath();
-      ctx.arc(bx, by, 42 * boost, 0, Math.PI * 2);
+      ctx.arc(bx, by, 31.5 * boost, 0, Math.PI * 2);
       ctx.fill();
 
       ctx.strokeStyle = "rgba(40, 36, 32, " + (0.18 * boost) + ")";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.ellipse(bx, by, 58 * boost, 18 * boost, 0.35, 0, Math.PI * 2);
+      ctx.ellipse(bx, by, 43.5 * boost, 13.5 * boost, 0.35, 0, Math.PI * 2);
       ctx.stroke();
       ctx.strokeStyle = "rgba(55, 48, 40, " + (0.1 * boost) + ")";
       ctx.beginPath();
-      ctx.ellipse(bx, by, 78 * boost, 24 * boost, -0.2, 0, Math.PI * 2);
+      ctx.ellipse(bx, by, 58.5 * boost, 18 * boost, -0.2, 0, Math.PI * 2);
       ctx.stroke();
 
       for (let i = 0; i < dust.length; i++) {
