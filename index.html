@@ -24,7 +24,6 @@
       overflow: hidden;
       cursor: none;
     }
-    /* paper grain */
     body::before {
       content: "";
       position: fixed;
@@ -35,19 +34,18 @@
       mix-blend-mode: multiply;
       z-index: 0;
     }
-    /* faint tech grid */
     body::after {
       content: "";
       position: fixed;
       inset: 0;
       pointer-events: none;
       z-index: 0;
-      opacity: 0.09;
+      opacity: 0.07;
       background-image:
-        linear-gradient(rgba(26,24,20,0.35) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(26,24,20,0.35) 1px, transparent 1px);
-      background-size: 48px 48px;
-      mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, #000 20%, transparent 75%);
+        linear-gradient(rgba(26,24,20,0.4) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(26,24,20,0.4) 1px, transparent 1px);
+      background-size: 52px 52px;
+      mask-image: radial-gradient(ellipse 65% 55% at 50% 50%, #000 15%, transparent 75%);
     }
     canvas#fx {
       position: fixed;
@@ -78,23 +76,15 @@
       font-size: clamp(3.2rem, 12vw, 7.5rem);
       letter-spacing: -0.03em;
       line-height: 0.95;
-      position: relative;
-      transition: letter-spacing 0.45s ease, transform 0.45s ease, text-shadow 0.45s ease;
       will-change: transform;
+      transition: letter-spacing 0.5s ease;
     }
-    .card.hot h1 {
-      letter-spacing: 0.06em;
-      transform: scale(1.035);
-      text-shadow:
-        0 0 24px rgba(110, 90, 255, 0.35),
-        0 0 48px rgba(80, 160, 255, 0.25),
-        2px 0 0 rgba(255, 80, 140, 0.25),
-        -2px 0 0 rgba(80, 180, 255, 0.25);
-    }
+    .card.hot h1 { letter-spacing: 0.02em; }
     .tag {
       font-size: 0.95rem;
       color: var(--muted);
       letter-spacing: 0.02em;
+      will-change: transform;
     }
     nav {
       display: flex;
@@ -109,34 +99,32 @@
       text-transform: uppercase;
       font-weight: 500;
       opacity: 0.55;
-      transition: opacity 0.25s ease, text-shadow 0.25s ease;
+      transition: opacity 0.25s ease;
       border-bottom: 1px solid transparent;
       padding-bottom: 2px;
+      will-change: transform;
     }
     nav a:hover {
       opacity: 1;
       border-bottom-color: var(--ink);
       cursor: none;
-      text-shadow: 0 0 18px rgba(110, 90, 255, 0.45);
     }
     .cursor {
       position: fixed;
-      width: 12px;
-      height: 12px;
+      width: 8px;
+      height: 8px;
       border-radius: 50%;
-      background: var(--ink);
+      background: rgba(20, 18, 16, 0.85);
       transform: translate(-50%, -50%);
       pointer-events: none;
       z-index: 10;
-      mix-blend-mode: difference;
       left: -100px;
       top: -100px;
-      box-shadow: 0 0 16px rgba(120, 100, 255, 0.8);
+      box-shadow: 0 0 10px rgba(0,0,0,0.25);
     }
     @media (hover: none) {
       body { cursor: auto; }
       .cursor, canvas#fx { display: none; }
-      body::after { opacity: 0.06; }
     }
   </style>
 </head>
@@ -146,7 +134,7 @@
   <main class="stage">
     <div class="card" id="card">
       <h1 id="title">SEALSHY</h1>
-      <p class="tag">its me :)</p>
+      <p class="tag" id="tag">its me :)</p>
       <nav>
         <a href="https://x.com/eusealshy" target="_blank" rel="noopener noreferrer">Twitter</a>
         <a href="https://instagram.com/eusealshy" target="_blank" rel="noopener noreferrer">Instagram</a>
@@ -156,16 +144,19 @@
   <script>
     const canvas = document.getElementById("fx");
     const ctx = canvas.getContext("2d");
-    const cursor = document.getElementById("cursor");
+    const cursorEl = document.getElementById("cursor");
     const card = document.getElementById("card");
-    const title = document.getElementById("title");
-    const links = document.querySelectorAll("nav a");
+    const pullables = [
+      document.getElementById("title"),
+      document.getElementById("tag"),
+      ...document.querySelectorAll("nav a"),
+    ];
 
     let w = 0, h = 0, dpr = 1;
-    let x = 0, y = 0, bx = 0, by = 0;
+    let mx = 0, my = 0, bx = 0, by = 0;
     let hot = 0;
-    const particles = [];
-    const N = 48;
+    const dust = [];
+    const DUST = 70;
 
     function resize() {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -176,40 +167,36 @@
       canvas.style.width = w + "px";
       canvas.style.height = h + "px";
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      x = bx = w / 2;
-      y = by = h / 2;
+      mx = bx = w / 2;
+      my = by = h / 2;
+      seedDust();
     }
+
+    function seedDust() {
+      dust.length = 0;
+      for (let i = 0; i < DUST; i++) {
+        dust.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          vx: 0,
+          vy: 0,
+          life: 0.35 + Math.random() * 0.65,
+          size: 0.8 + Math.random() * 1.6,
+        });
+      }
+    }
+
     resize();
     window.addEventListener("resize", resize);
 
-    for (let i = 0; i < N; i++) {
-      particles.push({
-        a: (Math.PI * 2 * i) / N,
-        r: 40 + Math.random() * 90,
-        s: 0.4 + Math.random() * 1.2,
-        o: Math.random(),
-        hue: 210 + Math.random() * 80,
-      });
-    }
-
     window.addEventListener("pointermove", (e) => {
-      x = e.clientX;
-      y = e.clientY;
-      cursor.style.left = x + "px";
-      cursor.style.top = y + "px";
-
-      // soft magnetic pull on title
-      const rect = title.getBoundingClientRect();
-      const cx = rect.left + rect.width / 2;
-      const cy = rect.top + rect.height / 2;
-      const dx = (x - cx) / w;
-      const dy = (y - cy) / h;
-      title.style.transform =
-        "translate(" + (dx * 18) + "px," + (dy * 12) + "px)" +
-        (card.classList.contains("hot") ? " scale(1.035)" : "");
+      mx = e.clientX;
+      my = e.clientY;
+      cursorEl.style.left = mx + "px";
+      cursorEl.style.top = my + "px";
     });
 
-    links.forEach((a) => {
+    document.querySelectorAll("nav a").forEach((a) => {
       a.addEventListener("pointerenter", () => {
         card.classList.add("hot");
         hot = 1;
@@ -220,68 +207,103 @@
       });
     });
 
-    let t = 0;
+    function pullElement(el, strength) {
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const dx = bx - cx;
+      const dy = by - cy;
+      const dist = Math.hypot(dx, dy) || 1;
+      // gentle suck only when near
+      const reach = 280;
+      const t = Math.max(0, 1 - dist / reach);
+      const force = t * t * strength * (hot ? 1.25 : 1);
+      const ox = (dx / dist) * force;
+      const oy = (dy / dist) * force;
+      const scale = 1 - t * 0.018 * (hot ? 1.4 : 1);
+      el.style.transform =
+        "translate(" + ox.toFixed(2) + "px," + oy.toFixed(2) + "px) scale(" + scale.toFixed(4) + ")";
+    }
+
     function frame() {
-      t += 0.016;
-      bx += (x - bx) * 0.12;
-      by += (y - by) * 0.12;
+      bx += (mx - bx) * 0.1;
+      by += (my - by) * 0.1;
 
       ctx.clearRect(0, 0, w, h);
 
-      const boost = hot ? 1.55 : 1;
-      const core = 90 * boost;
-      const mid = 180 * boost;
-      const outer = 300 * boost;
+      const boost = hot ? 1.2 : 1;
+      const R = 220 * boost;
 
-      // layered tech glow (lilac / blue / warm)
-      const g1 = ctx.createRadialGradient(bx, by, 0, bx, by, outer);
-      g1.addColorStop(0, "rgba(140, 120, 255, " + (0.42 * boost) + ")");
-      g1.addColorStop(0.25, "rgba(70, 160, 255, " + (0.28 * boost) + ")");
-      g1.addColorStop(0.55, "rgba(255, 90, 140, " + (0.12 * boost) + ")");
-      g1.addColorStop(1, "rgba(244, 239, 230, 0)");
+      // soft vignette well — muted brown/black, not neon
       ctx.globalCompositeOperation = "multiply";
-      ctx.fillStyle = g1;
+      const well = ctx.createRadialGradient(bx, by, 0, bx, by, R);
+      well.addColorStop(0, "rgba(18, 16, 14, " + (0.22 * boost) + ")");
+      well.addColorStop(0.35, "rgba(40, 34, 28, " + (0.14 * boost) + ")");
+      well.addColorStop(0.7, "rgba(60, 52, 42, 0.05)");
+      well.addColorStop(1, "rgba(244, 239, 230, 0)");
+      ctx.fillStyle = well;
       ctx.fillRect(0, 0, w, h);
 
-      ctx.globalCompositeOperation = "screen";
-      const g2 = ctx.createRadialGradient(bx, by, 0, bx, by, mid);
-      g2.addColorStop(0, "rgba(180, 170, 255, " + (0.55 * boost) + ")");
-      g2.addColorStop(0.4, "rgba(90, 180, 255, " + (0.28 * boost) + ")");
-      g2.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g2;
+      // darker core
+      ctx.globalCompositeOperation = "source-over";
+      const core = ctx.createRadialGradient(bx, by, 0, bx, by, 42 * boost);
+      core.addColorStop(0, "rgba(10, 9, 8, " + (0.55 * boost) + ")");
+      core.addColorStop(0.55, "rgba(20, 18, 16, 0.2)");
+      core.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = core;
       ctx.beginPath();
-      ctx.arc(bx, by, mid, 0, Math.PI * 2);
+      ctx.arc(bx, by, 42 * boost, 0, Math.PI * 2);
       ctx.fill();
 
-      // bright core
-      const g3 = ctx.createRadialGradient(bx, by, 0, bx, by, core);
-      g3.addColorStop(0, "rgba(255,255,255," + (0.55 * boost) + ")");
-      g3.addColorStop(0.35, "rgba(160,140,255," + (0.35 * boost) + ")");
-      g3.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = g3;
+      // faint accretion ring (desaturated)
+      ctx.strokeStyle = "rgba(40, 36, 32, " + (0.18 * boost) + ")";
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(bx, by, core, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.ellipse(bx, by, 58 * boost, 18 * boost, 0.35, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(55, 48, 40, " + (0.1 * boost) + ")";
+      ctx.beginPath();
+      ctx.ellipse(bx, by, 78 * boost, 24 * boost, -0.2, 0, Math.PI * 2);
+      ctx.stroke();
 
-      // orbiting particles / code-ish sparks
-      ctx.globalCompositeOperation = "lighter";
-      for (let i = 0; i < particles.length; i++) {
-        const p = particles[i];
-        const ang = p.a + t * p.s * (hot ? 1.8 : 1);
-        const rr = p.r * boost * (0.85 + 0.15 * Math.sin(t * 2 + p.o * 6));
-        const px = bx + Math.cos(ang) * rr;
-        const py = by + Math.sin(ang) * rr * 0.72;
-        const size = (hot ? 2.6 : 1.7) * (0.6 + p.o);
-        ctx.fillStyle = "hsla(" + p.hue + ", 85%, 65%, " + (0.35 + p.o * 0.45) + ")";
-        ctx.fillRect(px - size / 2, py - size / 2, size, size);
-        // occasional longer glitch bar
-        if (p.o > 0.82) {
-          ctx.fillStyle = "hsla(" + p.hue + ", 90%, 70%, 0.22)";
-          ctx.fillRect(px, py, 10 + 18 * Math.sin(t * 3 + p.a), 1.2);
+      // dust getting sucked in
+      for (let i = 0; i < dust.length; i++) {
+        const p = dust[i];
+        const dx = bx - p.x;
+        const dy = by - p.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const pull = (hot ? 0.055 : 0.035) * (80 / Math.max(dist, 28));
+        p.vx += (dx / dist) * pull;
+        p.vy += (dy / dist) * pull;
+        // slight orbital drag so it spirals
+        p.vx += (-dy / dist) * pull * 0.35;
+        p.vy += (dx / dist) * pull * 0.35;
+        p.vx *= 0.96;
+        p.vy *= 0.96;
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (dist < 14) {
+          // respawn at edge of influence
+          const a = Math.random() * Math.PI * 2;
+          const rr = 160 + Math.random() * 200;
+          p.x = bx + Math.cos(a) * rr;
+          p.y = by + Math.sin(a) * rr;
+          p.vx = 0;
+          p.vy = 0;
         }
+
+        const alpha = Math.min(0.45, (1 - Math.min(dist, 240) / 240) * 0.55) * p.life;
+        ctx.fillStyle = "rgba(28, 24, 20, " + alpha + ")";
+        ctx.fillRect(p.x, p.y, p.size, p.size);
       }
 
-      ctx.globalCompositeOperation = "source-over";
+      // gentle gravitational pull on copy
+      pullables.forEach((el, i) => {
+        const strength = i === 0 ? 14 : 9;
+        pullElement(el, strength);
+      });
+
       requestAnimationFrame(frame);
     }
     frame();
