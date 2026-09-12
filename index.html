@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
   <title>Who am i?</title>
   <meta name="description" content="Who am i?" />
-  <meta name="theme-color" content="#f4efe6" />
+  <meta name="theme-color" content="#e8dfd0" />
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/favicon-32.png" />
@@ -13,7 +13,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
   <style>
-    :root { --bg: #f4efe6; --ink: #1a1814; }
+    :root { --bg: #e8dfd0; --ink: #1a1814; }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; outline: none; }
     html, body { height: 100%; touch-action: none; }
     body {
@@ -78,8 +78,8 @@
       pointer-events: none;
       z-index: 0;
       background:
-        radial-gradient(ellipse 90% 70% at 50% 40%, rgba(232, 220, 200, 0.55), transparent 70%),
-        linear-gradient(180deg, #f7f2e9 0%, #f4efe6 45%, #efe6d8 100%);
+        radial-gradient(ellipse 90% 70% at 50% 40%, rgba(210, 190, 160, 0.35), transparent 70%),
+        linear-gradient(180deg, #ece3d4 0%, #e8dfd0 45%, #e0d4c2 100%);
       opacity: 1;
     }
     .draw-toggle {
@@ -99,7 +99,7 @@
       font-size: 0.68rem;
       letter-spacing: 0.16em;
       text-transform: uppercase;
-      opacity: 0.16;
+      opacity: 0.38;
       cursor: pointer;
       pointer-events: auto;
       transition: opacity 0.25s ease;
@@ -107,7 +107,7 @@
     }
     .draw-toggle:hover,
     .draw-toggle:focus-visible {
-      opacity: 0.45;
+      opacity: 0.72;
     }
     .draw-toggle .knob {
       width: 1.55rem;
@@ -563,21 +563,7 @@
       }
     }
 
-    const drawToggle = document.getElementById("drawToggle");
-    drawToggle.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      drawEnabled = !drawEnabled;
-      drawToggle.setAttribute("aria-checked", drawEnabled ? "true" : "false");
-      if (!drawEnabled) {
-        drawing = false;
-        hasInk = false;
-      }
-    });
-    // don't start page draw when toggling
-    drawToggle.addEventListener("pointerdown", (e) => e.stopPropagation());
 
-    raf = requestAnimationFrame(frame);
   </script>
 </body>
 </html>
