@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-build="1789183568">
+<html lang="en" data-build="1789183591">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
@@ -142,7 +142,7 @@
       background: rgba(26, 24, 20, 0.4);
       transition: transform 0.2s ease, background 0.2s ease;
     }
-    .draw-toggle[aria-checked="false"] .knob {
+    .draw-toggle[aria-checked="true"] .knob {
       background: rgba(26, 24, 20, 0.12);
       border-color: rgba(26, 24, 20, 0.45);
     }
@@ -157,7 +157,7 @@
   <canvas id="draw" aria-hidden="true"></canvas>
   <canvas id="fx" aria-hidden="true"></canvas>
   <div class="cursor" id="cursor" aria-hidden="true"></div>
-  <button type="button" class="draw-toggle" id="drawToggle" role="switch" aria-checked="true" title="Draw">
+  <button type="button" class="draw-toggle" id="drawToggle" role="switch" aria-checked="false" title="Draw">
     <span>Draw</span>
     <span class="knob" aria-hidden="true"></span>
   </button>
