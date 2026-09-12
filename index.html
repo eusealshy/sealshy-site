@@ -326,7 +326,7 @@
     });
 
     function nearFactor(dist) {
-      const near = 190;
+      const near = 220;
       return Math.max(0, 1 - dist / near);
     }
 
@@ -346,22 +346,7 @@
       return n;
     }
 
-    function applyTitlePull(dt) {
-      const tb = basePos.get(title);
-      if (!tb) return;
-      const dx = bx - tb.x;
-      const dy = by - tb.y;
-      const dist = Math.hypot(dx, dy) || 1;
-      const reach = Math.hypot(w, h) || 1;
-      const t = Math.max(0, 1 - dist / reach);
-      const force = t * 17.5 * (hot ? 1.25 : 1);
-      const ox = (dx / dist) * force;
-      const oy = (dy / dist) * force;
-      title.style.transform =
-        "translate(" + ox.toFixed(2) + "px," + oy.toFixed(2) + "px)";
-    }
-
-    // Per-letter: decay/shake/zoom only — NO big lateral pull (avoids overlap)
+    // Each letter sucked individually toward the ball when near its center
     function decayLetter(el, index, dt) {
       const base = basePos.get(el);
       if (!base) return 0;
@@ -369,29 +354,35 @@
       const dy = by - base.y;
       const dist = Math.hypot(dx, dy) || 1;
       const n = smoothNear(el, nearFactor(dist), dt);
+      const reach = Math.hypot(w, h) || 1;
+      const t = Math.max(0, 1 - dist / reach);
+
+      // pull THIS letter into the ball (stronger when closer to core)
+      const force = t * 14 * (hot ? 1.2 : 1) + n * n * 22;
+      const ox = (dx / dist) * force;
+      const oy = (dy / dist) * force;
 
       const blur = n * 1.55;
       const darken = n * 0.36;
       const opac = 1 - n * 0.38;
-      const zoom = 1 - n * 0.14;
-      // tiny toward-hole only on Y-ish scale, keep X spacing intact
-      const local = n * n * 4;
-      const lx = (dx / dist) * local * 0.25; // was huge before — capped
-      const ly = (dy / dist) * local;
+      const zoom = 1 - n * 0.2;
+      const stretchX = 1 + n * 0.05;
 
-      const shakeAmp = n * n * 1.04; // -35% vs teste 12
+      const shakeAmp = n * n * 1.04; // -35%
       const now = performance.now();
       const shx = Math.sin(now * 0.05 + index * 1.7) * shakeAmp;
       const shy = Math.cos(now * 0.062 + index * 1.3) * shakeAmp * 0.8;
-      const rot = Math.sin(now * 0.04 + index) * n * 1.625; // -35%
+      const rot = Math.sin(now * 0.04 + index) * n * 1.625;
+      const skew = (dx / dist) * n * 4;
 
       el.style.transform =
-        "translate(" + (lx + shx).toFixed(2) + "px," + (ly + shy).toFixed(2) + "px) " +
-        "scale(" + zoom.toFixed(4) + ") rotate(" + rot.toFixed(2) + "deg)";
+        "translate(" + (ox + shx).toFixed(2) + "px," + (oy + shy).toFixed(2) + "px) " +
+        "scale(" + (zoom * stretchX).toFixed(4) + "," + zoom.toFixed(4) + ") " +
+        "skewX(" + skew.toFixed(2) + "deg) rotate(" + rot.toFixed(2) + "deg)";
       el.style.filter =
         "blur(" + blur.toFixed(2) + "px) brightness(" + (1 - darken).toFixed(3) + ") contrast(" +
         (1 + n * 0.22).toFixed(3) + ")";
-      el.style.opacity = Math.max(0.62, opac).toFixed(3);
+      el.style.opacity = Math.max(0.58, opac).toFixed(3);
       if (n > 0.05) {
         const sh = (n * 2.4).toFixed(1);
         el.style.textShadow =
@@ -478,7 +469,7 @@
       ctx.ellipse(bx, by, 58.5 * boost, 18 * boost, -0.2, 0, Math.PI * 2);
       ctx.stroke();
 
-      applyTitlePull(dt);
+      title.style.transform = "none";
       let letterSuck = 0;
       chars.forEach((el, i) => {
         letterSuck = Math.max(letterSuck, decayLetter(el, i, dt));
