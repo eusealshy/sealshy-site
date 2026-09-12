@@ -14,7 +14,6 @@
       --bg: #f4efe6;
       --ink: #1a1814;
       --muted: #6b645a;
-      --blob: rgba(201, 168, 124, 0.35);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { height: 100%; }
@@ -25,35 +24,38 @@
       overflow: hidden;
       cursor: none;
     }
+    /* paper grain */
     body::before {
       content: "";
       position: fixed;
       inset: 0;
       pointer-events: none;
-      opacity: 0.45;
+      opacity: 0.4;
       background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
       mix-blend-mode: multiply;
       z-index: 0;
     }
-    .blob {
+    /* faint tech grid */
+    body::after {
+      content: "";
       position: fixed;
-      width: 280px;
-      height: 280px;
-      border-radius: 50%;
-      background: radial-gradient(circle, var(--blob) 0%, transparent 70%);
-      filter: blur(28px);
+      inset: 0;
       pointer-events: none;
-      transform: translate(-50%, -50%);
-      left: 50%;
-      top: 50%;
-      z-index: 1;
-      transition: width 0.4s ease, height 0.4s ease, background 0.4s ease;
-      will-change: left, top;
+      z-index: 0;
+      opacity: 0.09;
+      background-image:
+        linear-gradient(rgba(26,24,20,0.35) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(26,24,20,0.35) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, #000 20%, transparent 75%);
     }
-    .blob.hot {
-      width: 360px;
-      height: 360px;
-      background: radial-gradient(circle, rgba(180, 140, 100, 0.45) 0%, transparent 70%);
+    canvas#fx {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      pointer-events: none;
     }
     .stage {
       position: relative;
@@ -76,12 +78,18 @@
       font-size: clamp(3.2rem, 12vw, 7.5rem);
       letter-spacing: -0.03em;
       line-height: 0.95;
-      mix-blend-mode: multiply;
-      transition: letter-spacing 0.5s ease, transform 0.5s ease;
+      position: relative;
+      transition: letter-spacing 0.45s ease, transform 0.45s ease, text-shadow 0.45s ease;
+      will-change: transform;
     }
     .card.hot h1 {
-      letter-spacing: 0.04em;
-      transform: scale(1.02);
+      letter-spacing: 0.06em;
+      transform: scale(1.035);
+      text-shadow:
+        0 0 24px rgba(110, 90, 255, 0.35),
+        0 0 48px rgba(80, 160, 255, 0.25),
+        2px 0 0 rgba(255, 80, 140, 0.25),
+        -2px 0 0 rgba(80, 180, 255, 0.25);
     }
     .tag {
       font-size: 0.95rem;
@@ -101,7 +109,7 @@
       text-transform: uppercase;
       font-weight: 500;
       opacity: 0.55;
-      transition: opacity 0.25s ease;
+      transition: opacity 0.25s ease, text-shadow 0.25s ease;
       border-bottom: 1px solid transparent;
       padding-bottom: 2px;
     }
@@ -109,11 +117,12 @@
       opacity: 1;
       border-bottom-color: var(--ink);
       cursor: none;
+      text-shadow: 0 0 18px rgba(110, 90, 255, 0.45);
     }
     .cursor {
       position: fixed;
-      width: 10px;
-      height: 10px;
+      width: 12px;
+      height: 12px;
       border-radius: 50%;
       background: var(--ink);
       transform: translate(-50%, -50%);
@@ -122,19 +131,21 @@
       mix-blend-mode: difference;
       left: -100px;
       top: -100px;
+      box-shadow: 0 0 16px rgba(120, 100, 255, 0.8);
     }
     @media (hover: none) {
       body { cursor: auto; }
-      .cursor, .blob { display: none; }
+      .cursor, canvas#fx { display: none; }
+      body::after { opacity: 0.06; }
     }
   </style>
 </head>
 <body>
-  <div class="blob" id="blob" aria-hidden="true"></div>
+  <canvas id="fx" aria-hidden="true"></canvas>
   <div class="cursor" id="cursor" aria-hidden="true"></div>
   <main class="stage">
     <div class="card" id="card">
-      <h1>SEALSHY</h1>
+      <h1 id="title">SEALSHY</h1>
       <p class="tag">its me :)</p>
       <nav>
         <a href="https://x.com/eusealshy" target="_blank" rel="noopener noreferrer">Twitter</a>
@@ -143,38 +154,137 @@
     </div>
   </main>
   <script>
-    const blob = document.getElementById("blob");
+    const canvas = document.getElementById("fx");
+    const ctx = canvas.getContext("2d");
     const cursor = document.getElementById("cursor");
     const card = document.getElementById("card");
-    let x = innerWidth / 2, y = innerHeight / 2;
-    let bx = x, by = y;
+    const title = document.getElementById("title");
     const links = document.querySelectorAll("nav a");
+
+    let w = 0, h = 0, dpr = 1;
+    let x = 0, y = 0, bx = 0, by = 0;
+    let hot = 0;
+    const particles = [];
+    const N = 48;
+
+    function resize() {
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = window.innerWidth;
+      h = window.innerHeight;
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      x = bx = w / 2;
+      y = by = h / 2;
+    }
+    resize();
+    window.addEventListener("resize", resize);
+
+    for (let i = 0; i < N; i++) {
+      particles.push({
+        a: (Math.PI * 2 * i) / N,
+        r: 40 + Math.random() * 90,
+        s: 0.4 + Math.random() * 1.2,
+        o: Math.random(),
+        hue: 210 + Math.random() * 80,
+      });
+    }
 
     window.addEventListener("pointermove", (e) => {
       x = e.clientX;
       y = e.clientY;
       cursor.style.left = x + "px";
       cursor.style.top = y + "px";
+
+      // soft magnetic pull on title
+      const rect = title.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const dx = (x - cx) / w;
+      const dy = (y - cy) / h;
+      title.style.transform =
+        "translate(" + (dx * 18) + "px," + (dy * 12) + "px)" +
+        (card.classList.contains("hot") ? " scale(1.035)" : "");
     });
 
     links.forEach((a) => {
       a.addEventListener("pointerenter", () => {
-        blob.classList.add("hot");
         card.classList.add("hot");
+        hot = 1;
       });
       a.addEventListener("pointerleave", () => {
-        blob.classList.remove("hot");
         card.classList.remove("hot");
+        hot = 0;
       });
     });
 
-    (function loop() {
-      bx += (x - bx) * 0.08;
-      by += (y - by) * 0.08;
-      blob.style.left = bx + "px";
-      blob.style.top = by + "px";
-      requestAnimationFrame(loop);
-    })();
+    let t = 0;
+    function frame() {
+      t += 0.016;
+      bx += (x - bx) * 0.12;
+      by += (y - by) * 0.12;
+
+      ctx.clearRect(0, 0, w, h);
+
+      const boost = hot ? 1.55 : 1;
+      const core = 90 * boost;
+      const mid = 180 * boost;
+      const outer = 300 * boost;
+
+      // layered tech glow (lilac / blue / warm)
+      const g1 = ctx.createRadialGradient(bx, by, 0, bx, by, outer);
+      g1.addColorStop(0, "rgba(140, 120, 255, " + (0.42 * boost) + ")");
+      g1.addColorStop(0.25, "rgba(70, 160, 255, " + (0.28 * boost) + ")");
+      g1.addColorStop(0.55, "rgba(255, 90, 140, " + (0.12 * boost) + ")");
+      g1.addColorStop(1, "rgba(244, 239, 230, 0)");
+      ctx.globalCompositeOperation = "multiply";
+      ctx.fillStyle = g1;
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.globalCompositeOperation = "screen";
+      const g2 = ctx.createRadialGradient(bx, by, 0, bx, by, mid);
+      g2.addColorStop(0, "rgba(180, 170, 255, " + (0.55 * boost) + ")");
+      g2.addColorStop(0.4, "rgba(90, 180, 255, " + (0.28 * boost) + ")");
+      g2.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g2;
+      ctx.beginPath();
+      ctx.arc(bx, by, mid, 0, Math.PI * 2);
+      ctx.fill();
+
+      // bright core
+      const g3 = ctx.createRadialGradient(bx, by, 0, bx, by, core);
+      g3.addColorStop(0, "rgba(255,255,255," + (0.55 * boost) + ")");
+      g3.addColorStop(0.35, "rgba(160,140,255," + (0.35 * boost) + ")");
+      g3.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = g3;
+      ctx.beginPath();
+      ctx.arc(bx, by, core, 0, Math.PI * 2);
+      ctx.fill();
+
+      // orbiting particles / code-ish sparks
+      ctx.globalCompositeOperation = "lighter";
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        const ang = p.a + t * p.s * (hot ? 1.8 : 1);
+        const rr = p.r * boost * (0.85 + 0.15 * Math.sin(t * 2 + p.o * 6));
+        const px = bx + Math.cos(ang) * rr;
+        const py = by + Math.sin(ang) * rr * 0.72;
+        const size = (hot ? 2.6 : 1.7) * (0.6 + p.o);
+        ctx.fillStyle = "hsla(" + p.hue + ", 85%, 65%, " + (0.35 + p.o * 0.45) + ")";
+        ctx.fillRect(px - size / 2, py - size / 2, size, size);
+        // occasional longer glitch bar
+        if (p.o > 0.82) {
+          ctx.fillStyle = "hsla(" + p.hue + ", 90%, 70%, 0.22)";
+          ctx.fillRect(px, py, 10 + 18 * Math.sin(t * 3 + p.a), 1.2);
+        }
+      }
+
+      ctx.globalCompositeOperation = "source-over";
+      requestAnimationFrame(frame);
+    }
+    frame();
   </script>
 </body>
 </html>
