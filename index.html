@@ -6,18 +6,18 @@
 ║                    ( ● )                     ║
 ║                   /|||||\                    ║
 ║                                              ║
-║          Ideias merecem gravidade.           ║
-║    Quer transformar as suas em realidade?    ║
+║            Ideas deserve gravity.            ║
+║   Want to turn yours into something real?    ║
 ║                                              ║
-║     Não fique só inspecionando o vazio.      ║
-║              Entre em contato.               ║
+║         Don't just inspect the void.         ║
+║                  Reach out.                  ║
 ║                                              ║
 ║   >  x.com/eusealshy                         ║
 ║   >  instagram.com/eusealshy                 ║
 ║                                              ║
 ╚══════════════════════════════════════════════╝
 -->
-<html lang="en" data-build="1789224906">
+<html lang="en" data-build="1789225021">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
@@ -190,8 +190,27 @@
   </main>
   <script>
 
-    // ——— edit these (shows in DevTools Console) ———
-    const DEV_NOTES_ASCII = `
+    // ——— edit these (DevTools Console; language from browser) ———
+    const DEV_NOTES = {
+      en: `
+╔══════════════════════════════════════════════╗
+║                                              ║
+║             ✦  S E A L S H Y  ✦              ║
+║                    ( ● )                     ║
+║                   /|||||\\                    ║
+║                                              ║
+║            Ideas deserve gravity.            ║
+║   Want to turn yours into something real?    ║
+║                                              ║
+║         Don't just inspect the void.         ║
+║                  Reach out.                  ║
+║                                              ║
+║   >  x.com/eusealshy                         ║
+║   >  instagram.com/eusealshy                 ║
+║                                              ║
+╚══════════════════════════════════════════════╝
+`,
+      pt: `
 ╔══════════════════════════════════════════════╗
 ║                                              ║
 ║             ✦  S E A L S H Y  ✦              ║
@@ -208,12 +227,14 @@
 ║   >  instagram.com/eusealshy                 ║
 ║                                              ║
 ╚══════════════════════════════════════════════╝
-`;
+`,
+    };
     (function greetDev() {
       if (typeof console === "undefined" || !console.log) return;
       try {
-        // one log, trimmed — no empty black pills above/below
-        const msg = String(DEV_NOTES_ASCII).replace(/^\s+|\s+$/g, "");
+        const lang = String((navigator.languages && navigator.languages[0]) || navigator.language || "en").toLowerCase();
+        const pack = lang.indexOf("pt") === 0 ? DEV_NOTES.pt : DEV_NOTES.en;
+        const msg = String(pack).replace(/^\s+|\s+$/g, "");
         console.log(
           "%c" + msg,
           "font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; line-height: 1.35; color: #e8dfd0; background: #1a1814; padding: 12px 14px; border-radius: 8px; white-space: pre;"
