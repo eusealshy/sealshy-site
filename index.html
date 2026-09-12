@@ -178,7 +178,7 @@
     const links = [...document.querySelectorAll("nav a")];
     const PEN = "rgba(20, 18, 16, 0.85)";
     const LINE_W = 2.1; // +5% over 2.0
-    const INK_LAG = 0.25; // 0.1 + 0.15s
+    const INK_LAG = 0.15;
 
     "SEALSHY".split("").forEach((c) => {
       const s = document.createElement("span");
@@ -327,7 +327,10 @@
       return Math.max(0, 1 - dist / near);
     }
 
-    function pullAndDecay(el, strength, isChar) {
+    const smoothN = new Map(); // release lag ~0.2s
+    const RELEASE_LAG = 0.2;
+
+    function pullAndDecay(el, strength, isChar, dt) {
       const base = basePos.get(el);
       if (!base) return 0;
       const dx = bx - base.x;
@@ -335,7 +338,18 @@
       const dist = Math.hypot(dx, dy) || 1;
       const reach = Math.hypot(w, h) || 1;
       const t = Math.max(0, 1 - dist / reach);
-      const n = nearFactor(dist);
+      const target = nearFactor(dist);
+      let n = smoothN.get(el) || 0;
+      // approach fast, release with ~0.2s lag
+      if (target >= n) {
+        n += (target - n) * Math.min(1, (dt || 0.016) / 0.06);
+      } else {
+        const k = 1 - Math.exp(-(dt || 0.016) / RELEASE_LAG);
+        n += (target - n) * k;
+      }
+      if (n < 0.001) n = 0;
+      smoothN.set(el, n);
+
       const force = t * strength * (hot ? 1.25 : 1);
       const ox = (dx / dist) * force;
       const oy = (dy / dist) * force;
@@ -348,8 +362,14 @@
       const skew = (dx / dist) * n * 6;
       const rot = (isChar ? (Math.sin(dist * 0.05) * n * 5) : 0);
       const zoomKick = n * n * (isChar ? 10 : 5);
-      const zx = ox + (dx / dist) * zoomKick;
-      const zy = oy + (dy / dist) * zoomKick;
+      // light shake while being sucked
+      const shakeAmp = n * n * (isChar ? 1.8 : 0.7);
+      const shx = (Math.sin(performance.now() * 0.045 + base.x * 0.2) +
+        Math.sin(performance.now() * 0.09 + base.y)) * shakeAmp;
+      const shy = (Math.cos(performance.now() * 0.052 + base.y * 0.15) +
+        Math.sin(performance.now() * 0.07)) * shakeAmp * 0.85;
+      const zx = ox + (dx / dist) * zoomKick + shx;
+      const zy = oy + (dy / dist) * zoomKick + shy;
 
       el.style.transform =
         "translate(" + zx.toFixed(2) + "px," + zy.toFixed(2) + "px) " +
@@ -424,9 +444,9 @@
 
       let letterSuck = 0;
       chars.forEach((el) => {
-        letterSuck = Math.max(letterSuck, pullAndDecay(el, 17.5, true));
+        letterSuck = Math.max(letterSuck, pullAndDecay(el, 17.5, true, dt));
       });
-      softPull.forEach((el) => pullAndDecay(el, 11.25, false));
+      softPull.forEach((el) => pullAndDecay(el, 11.25, false, dt));
 
       const dustCount = Math.min(
         DUST_MAX,
