@@ -13,7 +13,6 @@
     :root {
       --bg: #f4efe6;
       --ink: #1a1814;
-      --muted: #6b645a;
       --pen: rgba(20, 18, 16, 0.85);
     }
     * {
@@ -24,9 +23,6 @@
       outline: none;
     }
     html, body { height: 100%; }
-    html {
-      -webkit-tap-highlight-color: transparent;
-    }
     body {
       font-family: Inter, system-ui, sans-serif;
       background: var(--bg);
@@ -36,31 +32,16 @@
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
-      -webkit-tap-highlight-color: transparent;
-      -webkit-focus-ring-color: transparent;
     }
     body::before {
       content: "";
       position: fixed;
       inset: 0;
       pointer-events: none;
-      opacity: 0.4;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+      opacity: 0.35;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
       mix-blend-mode: multiply;
       z-index: 0;
-    }
-    body::after {
-      content: "";
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 0;
-      opacity: 0.07;
-      background-image:
-        linear-gradient(rgba(26,24,20,0.4) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(26,24,20,0.4) 1px, transparent 1px);
-      background-size: 52px 52px;
-      mask-image: radial-gradient(ellipse 65% 55% at 50% 50%, #000 15%, transparent 75%);
     }
     canvas#draw, canvas#fx {
       position: fixed;
@@ -95,12 +76,11 @@
       line-height: 0.95;
       display: flex;
       justify-content: center;
-      gap: 0;
       pointer-events: none;
     }
     h1 .ch {
       display: inline-block;
-      will-change: transform, filter, opacity, text-shadow;
+      will-change: transform, opacity;
       transform-origin: center center;
     }
     nav {
@@ -119,20 +99,15 @@
       transition: opacity 0.25s ease;
       border-bottom: 1px solid transparent;
       padding-bottom: 2px;
-      will-change: transform, filter, opacity;
       cursor: none;
       outline: none;
-      -webkit-tap-highlight-color: transparent;
-      box-shadow: none;
     }
     nav a:hover,
     nav a:focus,
-    nav a:focus-visible,
     nav a:active {
       opacity: 1;
       border-bottom-color: var(--ink);
       outline: none;
-      box-shadow: none;
       background: transparent;
     }
     .cursor {
@@ -146,7 +121,6 @@
       z-index: 10;
       left: -100px;
       top: -100px;
-      box-shadow: 0 0 10px rgba(0,0,0,0.25);
     }
     @media (hover: none) {
       body { cursor: auto; }
@@ -173,12 +147,14 @@
     const canvas = document.getElementById("fx");
     const ctx = canvas.getContext("2d");
     const cursorEl = document.getElementById("cursor");
-    const card = document.getElementById("card");
     const title = document.getElementById("title");
     const links = [...document.querySelectorAll("nav a")];
     const PEN = "rgba(20, 18, 16, 0.85)";
-    const LINE_W = 2.1; // +5% over 2.0
+    const LINE_W = 2.1;
     const INK_LAG = 0.15;
+    const RELEASE_LAG = 0.4;
+    const NEAR = 210;
+    const DUST = 36;
 
     "SEALSHY".split("").forEach((c) => {
       const s = document.createElement("span");
@@ -187,22 +163,20 @@
       title.appendChild(s);
     });
     const chars = [...title.querySelectorAll(".ch")];
-    const softPull = [...links];
 
     let w = 0, h = 0, dpr = 1;
     let mx = 0, my = 0, bx = 0, by = 0;
     let hot = 0;
-    let drawing = false;
-    let inkX = 0, inkY = 0, hasInk = false;
-    let lastX = 0, lastY = 0;
+    let drawing = false, hasInk = false;
+    let inkX = 0, inkY = 0, lastX = 0, lastY = 0;
     const dust = [];
-    const DUST_BASE = 107;
-    const DUST_MAX = Math.round(DUST_BASE * 1.4); // +40% when sucking letters
     const basePos = new Map();
+    const smoothN = new Map();
+    let lastTs = 0;
 
     function sizeCanvas(c, cctx, keep) {
       let saved = null;
-      if (keep && w && h) {
+      if (keep && c.width) {
         saved = document.createElement("canvas");
         saved.width = c.width;
         saved.height = c.height;
@@ -216,10 +190,41 @@
       if (saved) cctx.drawImage(saved, 0, 0, w, h);
     }
 
+    function seedDust() {
+      dust.length = 0;
+      for (let i = 0; i < DUST; i++) {
+        dust.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          vx: 0,
+          vy: 0,
+          life: 0.4 + Math.random() * 0.6,
+          size: 1 + Math.random() * 1.4,
+        });
+      }
+    }
+
+    function cacheBases() {
+      title.style.transform = "none";
+      chars.forEach((el) => {
+        el.style.transform = "none";
+        el.style.opacity = "";
+      });
+      links.forEach((el) => {
+        el.style.transform = "none";
+        el.style.opacity = "";
+      });
+      void title.offsetWidth;
+      [...chars, ...links].forEach((el) => {
+        const r = el.getBoundingClientRect();
+        basePos.set(el, { x: r.left + r.width / 2, y: r.top + r.height / 2, half: r.width / 2 });
+      });
+    }
+
     function resize() {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
-      w = window.innerWidth;
-      h = window.innerHeight;
+      w = innerWidth;
+      h = innerHeight;
       sizeCanvas(drawCanvas, dctx, true);
       sizeCanvas(canvas, ctx, false);
       mx = bx = w / 2;
@@ -228,43 +233,9 @@
       cacheBases();
     }
 
-    function seedDust() {
-      dust.length = 0;
-      for (let i = 0; i < DUST_MAX; i++) {
-        dust.push({
-          x: Math.random() * w,
-          y: Math.random() * h,
-          vx: 0,
-          vy: 0,
-          life: 0.35 + Math.random() * 0.65,
-          size: 0.8 + Math.random() * 1.6,
-        });
-      }
-    }
-
-    function cacheBases() {
-      title.style.transform = "none";
-      const els = [...chars, ...softPull];
-      els.forEach((el) => {
-        el.style.transform = "none";
-        el.style.filter = "none";
-        el.style.opacity = "";
-        el.style.textShadow = "none";
-      });
-      void title.offsetWidth;
-      const tr = title.getBoundingClientRect();
-      basePos.set(title, { x: tr.left + tr.width / 2, y: tr.top + tr.height / 2 });
-      els.forEach((el) => {
-        const r = el.getBoundingClientRect();
-        basePos.set(el, { x: r.left + r.width / 2, y: r.top + r.height / 2 });
-      });
-    }
-
     resize();
-    window.addEventListener("resize", () => setTimeout(resize, 40));
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(cacheBases);
-    }
+    addEventListener("resize", () => setTimeout(resize, 40));
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(cacheBases);
 
     function overLink(el) {
       return !!(el && el.closest && el.closest("nav a"));
@@ -283,7 +254,7 @@
       lastY = y;
     }
 
-    window.addEventListener("pointerdown", (e) => {
+    addEventListener("pointerdown", (e) => {
       if (overLink(e.target)) return;
       e.preventDefault();
       drawing = true;
@@ -295,17 +266,9 @@
       dctx.arc(lastX, lastY, LINE_W * 0.5, 0, Math.PI * 2);
       dctx.fill();
     });
-
-    window.addEventListener("pointerup", () => {
-      drawing = false;
-      hasInk = false;
-    });
-    window.addEventListener("pointercancel", () => {
-      drawing = false;
-      hasInk = false;
-    });
-
-    window.addEventListener("pointermove", (e) => {
+    addEventListener("pointerup", () => { drawing = false; hasInk = false; });
+    addEventListener("pointercancel", () => { drawing = false; hasInk = false; });
+    addEventListener("pointermove", (e) => {
       mx = e.clientX;
       my = e.clientY;
       cursorEl.style.left = mx + "px";
@@ -313,229 +276,168 @@
     });
 
     links.forEach((a) => {
-      a.addEventListener("pointerenter", () => {
-        card.classList.add("hot");
-        hot = 1;
-      });
-      a.addEventListener("pointerleave", () => {
-        card.classList.remove("hot");
-        hot = 0;
-      });
-      a.addEventListener("mousedown", (e) => e.stopPropagation());
+      a.addEventListener("pointerenter", () => { hot = 1; });
+      a.addEventListener("pointerleave", () => { hot = 0; });
       a.addEventListener("focus", (e) => e.target.blur());
     });
 
     function nearFactor(dist) {
-      const near = 220;
-      return Math.max(0, 1 - dist / near);
+      return Math.max(0, 1 - dist / NEAR);
     }
-
-    const smoothN = new Map();
-    const RELEASE_LAG = 0.4;
 
     function smoothNear(el, target, dt) {
       let n = smoothN.get(el) || 0;
-      if (target >= n) {
-        n += (target - n) * Math.min(1, (dt || 0.016) / 0.06);
-      } else {
-        const k = 1 - Math.exp(-(dt || 0.016) / RELEASE_LAG);
-        n += (target - n) * k;
-      }
+      if (target >= n) n += (target - n) * Math.min(1, dt / 0.06);
+      else n += (target - n) * (1 - Math.exp(-dt / RELEASE_LAG));
       if (n < 0.001) n = 0;
       smoothN.set(el, n);
       return n;
     }
 
-    // Per-letter suck toward ball, then separate so they never stack
-    function decayLetter(el, index, dt) {
-      const base = basePos.get(el);
-      if (!base) return { el, index, base, n: 0, ox: 0, oy: 0, zoom: 1 };
-      const dx = bx - base.x;
-      const dy = by - base.y;
-      const dist = Math.hypot(dx, dy) || 1;
-      const n = smoothNear(el, nearFactor(dist), dt);
-      const reach = Math.hypot(w, h) || 1;
-      const t = Math.max(0, 1 - dist / reach);
-
-      const force = t * 12 * (hot ? 1.15 : 1) + n * n * 18;
-      let ox = (dx / dist) * force;
-      let oy = (dy / dist) * force;
-      const zoom = 1 - n * 0.18;
-
-      return { el, index, base, n, ox, oy, zoom, dx, dy, dist };
-    }
-
-    function applyLetterStates(states, dt) {
-      if (!states.length) return 0;
-      // desired centers
-      const xs = states.map((s) => s.base.x + s.ox);
-      const ys = states.map((s) => s.base.y + s.oy);
-      // original gaps between letter centers
-      const gaps = [];
-      for (let i = 1; i < states.length; i++) {
-        gaps.push(Math.max(8, states[i].base.x - states[i - 1].base.x));
-      }
-      // shrink gap a bit when sucked, but never collapse
-      const minKeep = 0.55;
-      // push apart left→right
-      for (let i = 1; i < states.length; i++) {
-        const keep = gaps[i - 1] * Math.max(minKeep, Math.min(states[i - 1].zoom, states[i].zoom));
-        const minX = xs[i - 1] + keep;
-        if (xs[i] < minX) xs[i] = minX;
-      }
-      // push apart right→left
-      for (let i = states.length - 2; i >= 0; i--) {
-        const keep = gaps[i] * Math.max(minKeep, Math.min(states[i].zoom, states[i + 1].zoom));
-        const maxX = xs[i + 1] - keep;
-        if (xs[i] > maxX) xs[i] = maxX;
-      }
-
-      let maxN = 0;
-      const now = performance.now();
-      states.forEach((s, i) => {
-        const ox = xs[i] - s.base.x;
-        const oy = ys[i] - s.base.y;
-        const n = s.n;
-        maxN = Math.max(maxN, n);
-        const blur = n * 1.55;
-        const darken = n * 0.36;
-        const opac = 1 - n * 0.38;
-        const shakeAmp = n * n * 1.04;
-        const shx = Math.sin(now * 0.05 + i * 1.7) * shakeAmp;
-        const shy = Math.cos(now * 0.062 + i * 1.3) * shakeAmp * 0.8;
-        const rot = Math.sin(now * 0.04 + i) * n * 1.625;
-
-        s.el.style.transform =
-          "translate(" + (ox + shx).toFixed(2) + "px," + (oy + shy).toFixed(2) + "px) " +
-          "scale(" + s.zoom.toFixed(4) + ") rotate(" + rot.toFixed(2) + "deg)";
-        s.el.style.filter =
-          "blur(" + blur.toFixed(2) + "px) brightness(" + (1 - darken).toFixed(3) + ") contrast(" +
-          (1 + n * 0.22).toFixed(3) + ")";
-        s.el.style.opacity = Math.max(0.58, opac).toFixed(3);
-        if (n > 0.05) {
-          const sh = (n * 2.4).toFixed(1);
-          s.el.style.textShadow =
-            sh + "px 0 0 rgba(40,34,28," + (0.2 * n).toFixed(2) + "), " +
-            "-" + sh + "px 0 0 rgba(20,18,16," + (0.16 * n).toFixed(2) + "), " +
-            "0 0 " + (n * 12).toFixed(1) + "px rgba(0,0,0," + (0.25 * n).toFixed(2) + ")";
-        } else {
-          s.el.style.textShadow = "none";
-        }
-      });
-      return maxN;
-    }
-
-    function pullLink(el, dt) {
-      const base = basePos.get(el);
-      if (!base) return;
-      const dx = bx - base.x;
-      const dy = by - base.y;
-      const dist = Math.hypot(dx, dy) || 1;
-      const reach = Math.hypot(w, h) || 1;
-      const t = Math.max(0, 1 - dist / reach);
-      const n = smoothNear(el, nearFactor(dist), dt);
-      const force = t * 11.25 * (hot ? 1.25 : 1);
-      const ox = (dx / dist) * force;
-      const oy = (dy / dist) * force;
-      const blur = n * 0.9;
-      const zoom = 1 - n * 0.1;
-      el.style.transform =
-        "translate(" + ox.toFixed(2) + "px," + oy.toFixed(2) + "px) scale(" + zoom.toFixed(4) + ")";
-      el.style.filter =
-        "blur(" + blur.toFixed(2) + "px) brightness(" + (1 - n * 0.28).toFixed(3) + ")";
-      // keep link hover opacity logic via CSS; floor when sucked
-      if (n > 0.02) el.style.opacity = Math.max(0.55, 1 - n * 0.22).toFixed(3);
-      else el.style.opacity = "";
-    }
-
-    let lastTs = 0;
     function frame(ts) {
       if (!lastTs) lastTs = ts;
       const dt = Math.min(0.05, (ts - lastTs) / 1000);
       lastTs = ts;
 
-      bx += (mx - bx) * 0.1;
-      by += (my - by) * 0.1;
+      bx += (mx - bx) * 0.12;
+      by += (my - by) * 0.12;
 
       if (drawing && hasInk) {
         const k = 1 - Math.exp(-dt / INK_LAG);
         inkX += (mx - inkX) * k;
         inkY += (my - inkY) * k;
-        const dist = Math.hypot(inkX - lastX, inkY - lastY);
-        if (dist > 0.35) strokeTo(inkX, inkY);
+        if (Math.hypot(inkX - lastX, inkY - lastY) > 0.4) strokeTo(inkX, inkY);
       }
 
       ctx.clearRect(0, 0, w, h);
+      const boost = hot ? 1.15 : 1;
+      const R = 190 * boost;
 
-      const boost = hot ? 1.2 : 1;
-      const R = 206 * boost;
-
+      // light well (45% of original ~ 0.55 strength already dialed soft)
       ctx.globalCompositeOperation = "multiply";
       const well = ctx.createRadialGradient(bx, by, 0, bx, by, R);
-      well.addColorStop(0, "rgba(18, 16, 14, " + (0.275 * boost) + ")");
-      well.addColorStop(0.35, "rgba(40, 34, 28, " + (0.175 * boost) + ")");
-      well.addColorStop(0.7, "rgba(60, 52, 42, 0.05)");
-      well.addColorStop(1, "rgba(244, 239, 230, 0)");
+      well.addColorStop(0, "rgba(18,16,14," + (0.15 * boost) + ")");
+      well.addColorStop(0.4, "rgba(40,34,28," + (0.08 * boost) + ")");
+      well.addColorStop(1, "rgba(244,239,230,0)");
       ctx.fillStyle = well;
       ctx.fillRect(0, 0, w, h);
 
       ctx.globalCompositeOperation = "source-over";
-      const core = ctx.createRadialGradient(bx, by, 0, bx, by, 31.5 * boost);
-      core.addColorStop(0, "rgba(10, 9, 8, " + (0.45 * boost) + ")");
-      core.addColorStop(0.55, "rgba(20, 18, 16, 0.2)");
+      const core = ctx.createRadialGradient(bx, by, 0, bx, by, 28 * boost);
+      core.addColorStop(0, "rgba(10,9,8," + (0.45 * boost) + ")");
+      core.addColorStop(0.6, "rgba(20,18,16,0.1)");
       core.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = core;
       ctx.beginPath();
-      ctx.arc(bx, by, 31.5 * boost, 0, Math.PI * 2);
+      ctx.arc(bx, by, 28 * boost, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = "rgba(40, 36, 32, " + (0.18 * boost) + ")";
+      ctx.strokeStyle = "rgba(40,36,32,0.18)";
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.ellipse(bx, by, 43.5 * boost, 13.5 * boost, 0.35, 0, Math.PI * 2);
+      ctx.ellipse(bx, by, 40 * boost, 12 * boost, 0.35, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.strokeStyle = "rgba(55, 48, 40, " + (0.1 * boost) + ")";
+      ctx.strokeStyle = "rgba(55,48,40,0.1)";
       ctx.beginPath();
-      ctx.ellipse(bx, by, 58.5 * boost, 18 * boost, -0.2, 0, Math.PI * 2);
+      ctx.ellipse(bx, by, 54 * boost, 16 * boost, -0.2, 0, Math.PI * 2);
       ctx.stroke();
 
-      title.style.transform = "none";
-      const letterStates = chars.map((el, i) => decayLetter(el, i, dt));
-      const letterSuck = applyLetterStates(letterStates, dt);
-      softPull.forEach((el) => pullLink(el, dt));
-
-      const dustCount = Math.min(
-        DUST_MAX,
-        Math.round(DUST_BASE * (1 + 0.4 * letterSuck))
-      );
-
-      for (let i = 0; i < dustCount; i++) {
+      // dust
+      let letterSuck = 0;
+      for (let i = 0; i < dust.length; i++) {
         const p = dust[i];
         const dx = bx - p.x;
         const dy = by - p.y;
         const dist = Math.hypot(dx, dy) || 1;
-        const pull = (hot ? 0.069 : 0.044) * (80 / Math.max(dist, 28));
-        p.vx += (dx / dist) * pull;
-        p.vy += (dy / dist) * pull;
-        p.vx += (-dy / dist) * pull * 0.35;
-        p.vy += (dx / dist) * pull * 0.35;
-        p.vx *= 0.96;
-        p.vy *= 0.96;
+        const pull = 0.04 * (70 / Math.max(dist, 24));
+        p.vx = (p.vx + (dx / dist) * pull - (dy / dist) * pull * 0.3) * 0.96;
+        p.vy = (p.vy + (dy / dist) * pull + (dx / dist) * pull * 0.3) * 0.96;
         p.x += p.vx;
         p.y += p.vy;
-
-        if (dist < 14) {
+        if (dist < 12) {
           const a = Math.random() * Math.PI * 2;
-          const rr = 160 + Math.random() * 200;
+          const rr = 120 + Math.random() * 160;
           p.x = bx + Math.cos(a) * rr;
           p.y = by + Math.sin(a) * rr;
-          p.vx = 0;
-          p.vy = 0;
+          p.vx = p.vy = 0;
+        }
+        const a = Math.min(0.4, (1 - Math.min(dist, 200) / 200) * 0.5) * p.life;
+        ctx.fillStyle = "rgba(28,24,20," + a + ")";
+        ctx.fillRect(p.x, p.y, p.size, p.size);
+      }
+
+      // --- letters: individual suck, no overlap, no CSS filter ---
+      const states = chars.map((el, i) => {
+        const base = basePos.get(el);
+        if (!base) return null;
+        const dx = bx - base.x;
+        const dy = by - base.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const n = smoothNear(el, nearFactor(dist), dt);
+        letterSuck = Math.max(letterSuck, n);
+        // pull toward ball; strength from THIS letter's nearness
+        const force = n * n * 28 + n * 8;
+        return {
+          el, i, base, n,
+          tx: base.x + (dx / dist) * force,
+          ty: base.y + (dy / dist) * force,
+          zoom: 1 - n * 0.22,
+        };
+      }).filter(Boolean);
+
+      // keep left-to-right order with minimum gap (anti-stack)
+      if (states.length) {
+        const gaps = [];
+        for (let i = 1; i < states.length; i++) {
+          gaps.push(Math.max(10, states[i].base.x - states[i - 1].base.x));
+        }
+        for (let i = 1; i < states.length; i++) {
+          const keep = gaps[i - 1] * Math.max(0.62, Math.min(states[i - 1].zoom, states[i].zoom));
+          const minX = states[i - 1].tx + keep;
+          if (states[i].tx < minX) states[i].tx = minX;
+        }
+        for (let i = states.length - 2; i >= 0; i--) {
+          const keep = gaps[i] * Math.max(0.62, Math.min(states[i].zoom, states[i + 1].zoom));
+          const maxX = states[i + 1].tx - keep;
+          if (states[i].tx > maxX) states[i].tx = maxX;
         }
 
-        const alpha = Math.min(0.45, (1 - Math.min(dist, 240) / 240) * 0.55) * p.life;
-        ctx.fillStyle = "rgba(28, 24, 20, " + alpha + ")";
-        ctx.fillRect(p.x, p.y, p.size, p.size);
+        const now = performance.now();
+        for (let i = 0; i < states.length; i++) {
+          const s = states[i];
+          const ox = s.tx - s.base.x;
+          const oy = s.ty - s.base.y;
+          const shake = s.n * s.n * 1.04;
+          const shx = Math.sin(now * 0.05 + i * 1.7) * shake;
+          const shy = Math.cos(now * 0.06 + i * 1.3) * shake * 0.8;
+          const rot = Math.sin(now * 0.04 + i) * s.n * 1.6;
+          s.el.style.transform =
+            "translate(" + (ox + shx).toFixed(2) + "px," + (oy + shy).toFixed(2) + "px) " +
+            "scale(" + s.zoom.toFixed(4) + ") rotate(" + rot.toFixed(2) + "deg)";
+          s.el.style.opacity = Math.max(0.55, 1 - s.n * 0.4).toFixed(3);
+        }
+      }
+
+      // light link pull (no filter)
+      links.forEach((el) => {
+        const base = basePos.get(el);
+        if (!base) return;
+        const dx = bx - base.x;
+        const dy = by - base.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const n = smoothNear(el, nearFactor(dist), dt);
+        const force = n * n * 12;
+        el.style.transform =
+          "translate(" + ((dx / dist) * force).toFixed(2) + "px," + ((dy / dist) * force).toFixed(2) + "px) " +
+          "scale(" + (1 - n * 0.08).toFixed(4) + ")";
+      });
+
+      // extra dust when sucking letters
+      const extra = Math.round(DUST * 0.4 * letterSuck);
+      for (let i = 0; i < extra && i < dust.length; i++) {
+        const p = dust[(i * 3) % dust.length];
+        ctx.fillStyle = "rgba(28,24,20,0.25)";
+        ctx.fillRect(p.x + 2, p.y - 2, p.size, p.size);
       }
 
       requestAnimationFrame(frame);
