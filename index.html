@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-build="1789182481">
+<html lang="en" data-build="1789182764">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
@@ -15,7 +15,14 @@
   <style>
     :root { --bg: #e8dfd0; --ink: #1a1814; }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; outline: none; }
-    html, body { height: 100%; touch-action: none; }
+    html, body {
+      height: 100%;
+      height: 100dvh;
+      width: 100%;
+      touch-action: none;
+      overflow: hidden;
+      overscroll-behavior: none;
+    }
     body {
       font-family: Inter, system-ui, sans-serif;
       background: var(--bg);
@@ -27,6 +34,11 @@
       -webkit-user-select: none;
       -webkit-touch-callout: none;
       overscroll-behavior: none;
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      height: 100dvh;
     }
     canvas#draw, canvas#fx {
       position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none;
@@ -106,7 +118,8 @@
       -webkit-tap-highlight-color: transparent;
     }
     .draw-toggle:hover,
-    .draw-toggle:focus-visible {
+    .draw-toggle:focus-visible,
+    .draw-toggle:active {
       opacity: 0.72;
     }
     .draw-toggle .knob {
@@ -315,7 +328,7 @@
       mx = e.clientX;
       my = e.clientY;
       if (!pointerLive) {
-        // first contact: place hole once, then lag follows
+        // first contact (mouse or finger): place hole once, then lag follows
         pointerLive = true;
         bx = mx;
         by = my;
@@ -324,7 +337,7 @@
         cursorEl.style.opacity = "1";
         initDust();
       }
-      // never snap bx/by on later clicks — that teleports the ball
+      // never snap bx/by on later presses — that teleports the ball
       drawing = false;
       hasInk = false;
       if (drawEnabled) {
@@ -341,11 +354,12 @@
       moving = true;
       lastMove = performance.now();
       cursorEl.style.transform = "translate3d(" + mx + "px," + my + "px,0) translate(-50%,-50%)";
-    });
+    }, { passive: false });
     addEventListener("pointerup", () => { drawing = false; hasInk = false; });
     addEventListener("pointercancel", () => { drawing = false; hasInk = false; });
     addEventListener("pointermove", (e) => {
-      // ignore synthetic/zero moves before the user actually aims
+      if (pointerLive || drawing) e.preventDefault();
+      // same path for mouse and touch — no mobile fork
       if (!pointerLive) {
         pointerLive = true;
         mx = bx = e.clientX;
@@ -361,7 +375,7 @@
       moving = true;
       lastMove = performance.now();
       cursorEl.style.transform = "translate3d(" + mx + "px," + my + "px,0) translate(-50%,-50%)";
-    });
+    }, { passive: false });
 
     links.forEach((a) => {
       a.addEventListener("pointerenter", () => { hot = 1; });
