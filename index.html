@@ -16,8 +16,17 @@
       --muted: #6b645a;
       --pen: rgba(20, 18, 16, 0.85);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      outline: none;
+    }
     html, body { height: 100%; }
+    html {
+      -webkit-tap-highlight-color: transparent;
+    }
     body {
       font-family: Inter, system-ui, sans-serif;
       background: var(--bg);
@@ -25,6 +34,10 @@
       overflow: hidden;
       cursor: none;
       touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-focus-ring-color: transparent;
     }
     body::before {
       content: "";
@@ -108,10 +121,19 @@
       padding-bottom: 2px;
       will-change: transform, filter, opacity;
       cursor: none;
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+      box-shadow: none;
     }
-    nav a:hover {
+    nav a:hover,
+    nav a:focus,
+    nav a:focus-visible,
+    nav a:active {
       opacity: 1;
       border-bottom-color: var(--ink);
+      outline: none;
+      box-shadow: none;
+      background: transparent;
     }
     .cursor {
       position: fixed;
@@ -155,6 +177,8 @@
     const title = document.getElementById("title");
     const links = [...document.querySelectorAll("nav a")];
     const PEN = "rgba(20, 18, 16, 0.85)";
+    const LINE_W = 2.1; // +5% over 2.0
+    const INK_LAG = 0.25; // 0.1 + 0.15s
 
     "SEALSHY".split("").forEach((c) => {
       const s = document.createElement("span");
@@ -168,10 +192,12 @@
     let w = 0, h = 0, dpr = 1;
     let mx = 0, my = 0, bx = 0, by = 0;
     let hot = 0;
+    let drawing = false;
     let inkX = 0, inkY = 0, hasInk = false;
     let lastX = 0, lastY = 0;
     const dust = [];
-    const DUST = 107;
+    const DUST_BASE = 107;
+    const DUST_MAX = Math.round(DUST_BASE * 1.4); // +40% when sucking letters
     const basePos = new Map();
 
     function sizeCanvas(c, cctx, keep) {
@@ -187,9 +213,7 @@
       c.style.width = w + "px";
       c.style.height = h + "px";
       cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      if (saved) {
-        cctx.drawImage(saved, 0, 0, w, h);
-      }
+      if (saved) cctx.drawImage(saved, 0, 0, w, h);
     }
 
     function resize() {
@@ -206,7 +230,7 @@
 
     function seedDust() {
       dust.length = 0;
-      for (let i = 0; i < DUST; i++) {
+      for (let i = 0; i < DUST_MAX; i++) {
         dust.push({
           x: Math.random() * w,
           y: Math.random() * h,
@@ -239,9 +263,13 @@
       document.fonts.ready.then(cacheBases);
     }
 
+    function overLink(el) {
+      return !!(el && el.closest && el.closest("nav a"));
+    }
+
     function strokeTo(x, y) {
       dctx.strokeStyle = PEN;
-      dctx.lineWidth = 2.0;
+      dctx.lineWidth = LINE_W;
       dctx.lineCap = "round";
       dctx.lineJoin = "round";
       dctx.beginPath();
@@ -252,16 +280,33 @@
       lastY = y;
     }
 
+    window.addEventListener("pointerdown", (e) => {
+      if (overLink(e.target)) return;
+      e.preventDefault();
+      drawing = true;
+      inkX = lastX = mx = e.clientX;
+      inkY = lastY = my = e.clientY;
+      hasInk = true;
+      dctx.fillStyle = PEN;
+      dctx.beginPath();
+      dctx.arc(lastX, lastY, LINE_W * 0.5, 0, Math.PI * 2);
+      dctx.fill();
+    });
+
+    window.addEventListener("pointerup", () => {
+      drawing = false;
+      hasInk = false;
+    });
+    window.addEventListener("pointercancel", () => {
+      drawing = false;
+      hasInk = false;
+    });
+
     window.addEventListener("pointermove", (e) => {
       mx = e.clientX;
       my = e.clientY;
       cursorEl.style.left = mx + "px";
       cursorEl.style.top = my + "px";
-      if (!hasInk) {
-        inkX = lastX = mx;
-        inkY = lastY = my;
-        hasInk = true;
-      }
     });
 
     links.forEach((a) => {
@@ -273,6 +318,8 @@
         card.classList.remove("hot");
         hot = 0;
       });
+      a.addEventListener("mousedown", (e) => e.stopPropagation());
+      a.addEventListener("focus", (e) => e.target.blur());
     });
 
     function nearFactor(dist) {
@@ -282,7 +329,7 @@
 
     function pullAndDecay(el, strength, isChar) {
       const base = basePos.get(el);
-      if (!base) return;
+      if (!base) return 0;
       const dx = bx - base.x;
       const dy = by - base.y;
       const dist = Math.hypot(dx, dy) || 1;
@@ -321,6 +368,7 @@
       } else {
         el.style.textShadow = "none";
       }
+      return n;
     }
 
     let lastTs = 0;
@@ -332,13 +380,12 @@
       bx += (mx - bx) * 0.1;
       by += (my - by) * 0.1;
 
-      // ~0.1s lag on ink trail (clean follow)
-      if (hasInk) {
-        const k = 1 - Math.exp(-dt / 0.1);
+      if (drawing && hasInk) {
+        const k = 1 - Math.exp(-dt / INK_LAG);
         inkX += (mx - inkX) * k;
         inkY += (my - inkY) * k;
         const dist = Math.hypot(inkX - lastX, inkY - lastY);
-        if (dist > 0.4) strokeTo(inkX, inkY);
+        if (dist > 0.35) strokeTo(inkX, inkY);
       }
 
       ctx.clearRect(0, 0, w, h);
@@ -375,7 +422,18 @@
       ctx.ellipse(bx, by, 58.5 * boost, 18 * boost, -0.2, 0, Math.PI * 2);
       ctx.stroke();
 
-      for (let i = 0; i < dust.length; i++) {
+      let letterSuck = 0;
+      chars.forEach((el) => {
+        letterSuck = Math.max(letterSuck, pullAndDecay(el, 17.5, true));
+      });
+      softPull.forEach((el) => pullAndDecay(el, 11.25, false));
+
+      const dustCount = Math.min(
+        DUST_MAX,
+        Math.round(DUST_BASE * (1 + 0.4 * letterSuck))
+      );
+
+      for (let i = 0; i < dustCount; i++) {
         const p = dust[i];
         const dx = bx - p.x;
         const dy = by - p.y;
@@ -404,12 +462,9 @@
         ctx.fillRect(p.x, p.y, p.size, p.size);
       }
 
-      chars.forEach((el) => pullAndDecay(el, 17.5, true));
-      softPull.forEach((el) => pullAndDecay(el, 11.25, false));
-
       requestAnimationFrame(frame);
     }
-    frame();
+    requestAnimationFrame(frame);
   </script>
 </body>
 </html>
