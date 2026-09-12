@@ -94,7 +94,7 @@
     const INK_LAG = 0.1;
     const RELEASE_LAG = 0.4;
     const NEAR = 200;
-    const DUST = 16;
+    const DUST = 64; // ~60% of full black-hole dust
     const MAX_SEG = 48; // never draw a giant trail line
 
     "SEALSHY".split("").forEach((c) => {
@@ -318,33 +318,32 @@
       ctx.ellipse(bx, by, 50 * boost, 15 * boost, -0.2, 0, Math.PI * 2);
       ctx.stroke();
 
-      // particles only while active (saves CPU when idle)
-      if (!idle || hot) {
-        for (let i = 0; i < DUST; i++) {
-          const o = i * 5;
-          let x = dust[o], y = dust[o + 1], vx = dust[o + 2], vy = dust[o + 3];
-          const life = dust[o + 4];
-          const dx = bx - x;
-          const dy = by - y;
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const pull = 0.035 * (60 / Math.max(dist, 20));
-          vx = (vx + (dx / dist) * pull) * 0.95;
-          vy = (vy + (dy / dist) * pull) * 0.95;
-          x += vx;
-          y += vy;
-          if (dist < 10) {
-            const a = Math.random() * Math.PI * 2;
-            const rr = 100 + Math.random() * 140;
-            x = bx + Math.cos(a) * rr;
-            y = by + Math.sin(a) * rr;
-            vx = vy = 0;
-          }
-          dust[o] = x; dust[o + 1] = y; dust[o + 2] = vx; dust[o + 3] = vy;
-          const a = (1 - Math.min(dist, 180) / 180) * 0.35 * life;
-          if (a > 0.02) {
-            ctx.fillStyle = "rgba(28,24,20," + a + ")";
-            ctx.fillRect(x, y, 1 + (i & 1), 1 + (i & 1));
-          }
+      // black-hole dust always on (~60% count of full look)
+      for (let i = 0; i < DUST; i++) {
+        const o = i * 5;
+        let x = dust[o], y = dust[o + 1], vx = dust[o + 2], vy = dust[o + 3];
+        const life = dust[o + 4];
+        const dx = bx - x;
+        const dy = by - y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const pull = 0.04 * (70 / Math.max(dist, 18));
+        // light orbital spin so it reads as accretion, not just rain
+        vx = (vx + (dx / dist) * pull - (dy / dist) * pull * 0.28) * 0.955;
+        vy = (vy + (dy / dist) * pull + (dx / dist) * pull * 0.28) * 0.955;
+        x += vx;
+        y += vy;
+        if (dist < 10) {
+          const a = Math.random() * Math.PI * 2;
+          const rr = 90 + Math.random() * 150;
+          x = bx + Math.cos(a) * rr;
+          y = by + Math.sin(a) * rr;
+          vx = vy = 0;
+        }
+        dust[o] = x; dust[o + 1] = y; dust[o + 2] = vx; dust[o + 3] = vy;
+        const a = (1 - Math.min(dist, 200) / 200) * 0.42 * life;
+        if (a > 0.025) {
+          ctx.fillStyle = "rgba(28,24,20," + a + ")";
+          ctx.fillRect(x, y, 1 + (i & 1), 1 + (i & 1));
         }
       }
 
