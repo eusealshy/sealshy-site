@@ -76,15 +76,20 @@
       font-size: clamp(3.2rem, 12vw, 7.5rem);
       letter-spacing: -0.03em;
       line-height: 0.95;
-      will-change: transform;
-      transition: letter-spacing 0.5s ease;
+      display: flex;
+      justify-content: center;
+      gap: 0;
     }
-    .card.hot h1 { letter-spacing: 0.02em; }
+    h1 .ch {
+      display: inline-block;
+      will-change: transform, filter, opacity, text-shadow;
+      transform-origin: center center;
+    }
     .tag {
       font-size: 0.95rem;
       color: var(--muted);
       letter-spacing: 0.02em;
-      will-change: transform;
+      will-change: transform, filter, opacity;
     }
     nav {
       display: flex;
@@ -102,7 +107,7 @@
       transition: opacity 0.25s ease;
       border-bottom: 1px solid transparent;
       padding-bottom: 2px;
-      will-change: transform;
+      will-change: transform, filter, opacity;
     }
     nav a:hover {
       opacity: 1;
@@ -133,7 +138,7 @@
   <div class="cursor" id="cursor" aria-hidden="true"></div>
   <main class="stage">
     <div class="card" id="card">
-      <h1 id="title">SEALSHY</h1>
+      <h1 id="title" aria-label="SEALSHY"></h1>
       <p class="tag" id="tag">its me :)</p>
       <nav>
         <a href="https://x.com/eusealshy" target="_blank" rel="noopener noreferrer">Twitter</a>
@@ -146,17 +151,26 @@
     const ctx = canvas.getContext("2d");
     const cursorEl = document.getElementById("cursor");
     const card = document.getElementById("card");
-    const pullables = [
-      document.getElementById("title"),
-      document.getElementById("tag"),
-      ...document.querySelectorAll("nav a"),
-    ];
+    const title = document.getElementById("title");
+    const tag = document.getElementById("tag");
+    const links = [...document.querySelectorAll("nav a")];
+
+    // split title into letters
+    "SEALSHY".split("").forEach((c) => {
+      const s = document.createElement("span");
+      s.className = "ch";
+      s.textContent = c;
+      title.appendChild(s);
+    });
+    const chars = [...title.querySelectorAll(".ch")];
+    const softPull = [tag, ...links];
 
     let w = 0, h = 0, dpr = 1;
     let mx = 0, my = 0, bx = 0, by = 0;
     let hot = 0;
     const dust = [];
-    const DUST = 70;
+    const DUST = 93; // was 70 (+33%)
+    const basePos = new Map();
 
     function resize() {
       dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -170,6 +184,7 @@
       mx = bx = w / 2;
       my = by = h / 2;
       seedDust();
+      cacheBases();
     }
 
     function seedDust() {
@@ -186,8 +201,27 @@
       }
     }
 
+    function cacheBases() {
+      const els = [...chars, ...softPull];
+      els.forEach((el) => {
+        el.style.transform = "none";
+        el.style.filter = "none";
+        el.style.opacity = "";
+        el.style.textShadow = "none";
+      });
+      // force layout
+      void title.offsetWidth;
+      els.forEach((el) => {
+        const r = el.getBoundingClientRect();
+        basePos.set(el, { x: r.left + r.width / 2, y: r.top + r.height / 2 });
+      });
+    }
+
     resize();
-    window.addEventListener("resize", resize);
+    window.addEventListener("resize", () => setTimeout(resize, 40));
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(cacheBases);
+    }
 
     window.addEventListener("pointermove", (e) => {
       mx = e.clientX;
@@ -196,7 +230,7 @@
       cursorEl.style.top = my + "px";
     });
 
-    document.querySelectorAll("nav a").forEach((a) => {
+    links.forEach((a) => {
       a.addEventListener("pointerenter", () => {
         card.classList.add("hot");
         hot = 1;
@@ -207,35 +241,51 @@
       });
     });
 
-    const basePos = new Map();
-    function cacheBases() {
-      pullables.forEach((el) => {
-        el.style.transform = "none";
-        const r = el.getBoundingClientRect();
-        basePos.set(el, { x: r.left + r.width / 2, y: r.top + r.height / 2 });
-      });
-    }
-    cacheBases();
-    window.addEventListener("resize", () => setTimeout(cacheBases, 50));
-    if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(cacheBases);
+    function nearFactor(dist) {
+      // strong only when close to the well
+      const near = 170;
+      return Math.max(0, 1 - dist / near);
     }
 
-    function pullElement(el, strength) {
+    function pullAndDecay(el, strength, isChar) {
       const base = basePos.get(el);
       if (!base) return;
       const dx = bx - base.x;
       const dy = by - base.y;
       const dist = Math.hypot(dx, dy) || 1;
-      // whole-screen soft falloff; strength already +25%
       const reach = Math.hypot(w, h) || 1;
       const t = Math.max(0, 1 - dist / reach);
+      const n = nearFactor(dist);
       const force = t * strength * (hot ? 1.25 : 1);
       const ox = (dx / dist) * force;
       const oy = (dy / dist) * force;
-      const scale = 1 - t * 0.022 * (hot ? 1.4 : 1);
+
+      // deterioration toward black hole (still readable)
+      const blur = n * (isChar ? 1.15 : 0.7);
+      const darken = n * 0.28;
+      const opac = 1 - n * (isChar ? 0.32 : 0.22);
+      const squash = 1 - n * 0.06;
+      const stretchX = 1 + n * 0.04;
+      const skew = (dx / dist) * n * 4;
+      const rot = (isChar ? (Math.sin(dist * 0.05) * n * 3) : 0);
+
       el.style.transform =
-        "translate(" + ox.toFixed(2) + "px," + oy.toFixed(2) + "px) scale(" + scale.toFixed(4) + ")";
+        "translate(" + ox.toFixed(2) + "px," + oy.toFixed(2) + "px) " +
+        "scale(" + (squash * stretchX).toFixed(4) + "," + squash.toFixed(4) + ") " +
+        "skewX(" + skew.toFixed(2) + "deg) rotate(" + rot.toFixed(2) + "deg)";
+      el.style.filter =
+        "blur(" + blur.toFixed(2) + "px) brightness(" + (1 - darken).toFixed(3) + ") contrast(" +
+        (1 + n * 0.15).toFixed(3) + ")";
+      el.style.opacity = Math.max(0.62, opac).toFixed(3);
+      if (n > 0.05) {
+        const sh = (n * 2.2).toFixed(1);
+        el.style.textShadow =
+          sh + "px 0 0 rgba(40,34,28," + (0.18 * n).toFixed(2) + "), " +
+          "-" + sh + "px 0 0 rgba(20,18,16," + (0.14 * n).toFixed(2) + "), " +
+          "0 0 " + (n * 10).toFixed(1) + "px rgba(0,0,0," + (0.2 * n).toFixed(2) + ")";
+      } else {
+        el.style.textShadow = "none";
+      }
     }
 
     function frame() {
@@ -247,7 +297,6 @@
       const boost = hot ? 1.2 : 1;
       const R = 275 * boost;
 
-      // soft vignette well — muted brown/black, not neon
       ctx.globalCompositeOperation = "multiply";
       const well = ctx.createRadialGradient(bx, by, 0, bx, by, R);
       well.addColorStop(0, "rgba(18, 16, 14, " + (0.275 * boost) + ")");
@@ -257,7 +306,6 @@
       ctx.fillStyle = well;
       ctx.fillRect(0, 0, w, h);
 
-      // darker core
       ctx.globalCompositeOperation = "source-over";
       const core = ctx.createRadialGradient(bx, by, 0, bx, by, 42 * boost);
       core.addColorStop(0, "rgba(10, 9, 8, " + (0.55 * boost) + ")");
@@ -268,7 +316,6 @@
       ctx.arc(bx, by, 42 * boost, 0, Math.PI * 2);
       ctx.fill();
 
-      // faint accretion ring (desaturated)
       ctx.strokeStyle = "rgba(40, 36, 32, " + (0.18 * boost) + ")";
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -279,7 +326,6 @@
       ctx.ellipse(bx, by, 78 * boost, 24 * boost, -0.2, 0, Math.PI * 2);
       ctx.stroke();
 
-      // dust getting sucked in
       for (let i = 0; i < dust.length; i++) {
         const p = dust[i];
         const dx = bx - p.x;
@@ -288,7 +334,6 @@
         const pull = (hot ? 0.069 : 0.044) * (80 / Math.max(dist, 28));
         p.vx += (dx / dist) * pull;
         p.vy += (dy / dist) * pull;
-        // slight orbital drag so it spirals
         p.vx += (-dy / dist) * pull * 0.35;
         p.vy += (dx / dist) * pull * 0.35;
         p.vx *= 0.96;
@@ -297,7 +342,6 @@
         p.y += p.vy;
 
         if (dist < 14) {
-          // respawn at edge of influence
           const a = Math.random() * Math.PI * 2;
           const rr = 160 + Math.random() * 200;
           p.x = bx + Math.cos(a) * rr;
@@ -311,11 +355,8 @@
         ctx.fillRect(p.x, p.y, p.size, p.size);
       }
 
-      // gentle gravitational pull on copy
-      pullables.forEach((el, i) => {
-        const strength = i === 0 ? 17.5 : 11.25;
-        pullElement(el, strength);
-      });
+      chars.forEach((el) => pullAndDecay(el, 17.5, true));
+      softPull.forEach((el, i) => pullAndDecay(el, 11.25, false));
 
       requestAnimationFrame(frame);
     }
