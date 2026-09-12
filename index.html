@@ -310,6 +310,7 @@
 
     addEventListener("pointerdown", (e) => {
       if (overLink(e.target)) return;
+      if (e.target.closest && e.target.closest("#drawToggle")) return;
       e.preventDefault();
       try { document.body.setPointerCapture(e.pointerId); } catch (_) {}
       if (!pointerLive) {
@@ -369,10 +370,7 @@
       return dist >= NEAR ? 0 : 1 - dist / NEAR;
     }
 
-    function frame(ts) {
-      raf = 0;
-      if (!visible) return;
-      const drawToggle = document.getElementById("drawToggle");
+    const drawToggle = document.getElementById("drawToggle");
     drawToggle.addEventListener("click", (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -383,10 +381,15 @@
         hasInk = false;
       }
     });
-    // don't start page draw when toggling
-    drawToggle.addEventListener("pointerdown", (e) => e.stopPropagation());
+    drawToggle.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
 
-    raf = requestAnimationFrame(frame);
+    function frame(ts) {
+      raf = 0;
+      if (!visible) return;
+      raf = requestAnimationFrame(frame);
 
       if (!lastTs) lastTs = ts;
       const dt = Math.min(0.033, (ts - lastTs) / 1000);
