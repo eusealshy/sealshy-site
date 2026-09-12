@@ -61,6 +61,7 @@
       transform: translate3d(-50%, -50%, 0);
       pointer-events: none; z-index: 10; left: 0; top: 0;
       contain: strict;
+      opacity: 0;
     }
     @media (hover: none) {
       body { cursor: auto; }
@@ -121,6 +122,7 @@
     let moving = false;
     let lastMove = 0;
     let needsLetterReset = false;
+    let pointerLive = false; // effect off until first real mouse move
 
     function initDust() {
       for (let i = 0; i < DUST; i++) {
@@ -214,14 +216,20 @@
     addEventListener("pointerdown", (e) => {
       if (overLink(e.target)) return;
       e.preventDefault();
+      if (!pointerLive) {
+        pointerLive = true;
+        cursorEl.style.opacity = "1";
+        initDust();
+      }
       drawing = true;
-      mx = e.clientX;
-      my = e.clientY;
+      mx = bx = e.clientX;
+      my = by = e.clientY;
       inkX = lastX = mx;
       inkY = lastY = my;
       hasInk = true;
       moving = true;
       lastMove = performance.now();
+      cursorEl.style.transform = "translate3d(" + mx + "px," + my + "px,0) translate(-50%,-50%)";
       dctx.fillStyle = PEN;
       dctx.beginPath();
       dctx.arc(lastX, lastY, LINE_W * 0.5, 0, Math.PI * 2);
@@ -230,8 +238,19 @@
     addEventListener("pointerup", () => { drawing = false; hasInk = false; });
     addEventListener("pointercancel", () => { drawing = false; hasInk = false; });
     addEventListener("pointermove", (e) => {
-      mx = e.clientX;
-      my = e.clientY;
+      // ignore synthetic/zero moves before the user actually aims
+      if (!pointerLive) {
+        pointerLive = true;
+        mx = bx = e.clientX;
+        my = by = e.clientY;
+        inkX = lastX = mx;
+        inkY = lastY = my;
+        cursorEl.style.opacity = "1";
+        initDust(); // spawn around first contact, not page center
+      } else {
+        mx = e.clientX;
+        my = e.clientY;
+      }
       moving = true;
       lastMove = performance.now();
       cursorEl.style.transform = "translate3d(" + mx + "px," + my + "px,0) translate(-50%,-50%)";
@@ -263,6 +282,12 @@
 
       const idle = !drawing && (ts - lastMove > 120);
       if (idle) moving = false;
+
+      if (!pointerLive) {
+        // pristine landing until the user moves the mouse
+        ctx.clearRect(0, 0, w, h);
+        return;
+      }
 
       bx += (mx - bx) * 0.14;
       by += (my - by) * 0.14;
