@@ -449,23 +449,32 @@
       const boost = hot ? 1.2 : 1;
       const R = 206 * boost;
 
-      // almost no dark well — only a whisper + rings + particles
-      ctx.globalCompositeOperation = "source-over";
+      // dark well restored at 65% strength (35% lighter)
+      ctx.globalCompositeOperation = "multiply";
       const well = ctx.createRadialGradient(bx, by, 0, bx, by, R);
-      well.addColorStop(0, "rgba(18, 16, 14, " + (0.035 * boost) + ")");
-      well.addColorStop(0.45, "rgba(40, 34, 28, " + (0.012 * boost) + ")");
+      well.addColorStop(0, "rgba(18, 16, 14, " + (0.179 * boost) + ")");
+      well.addColorStop(0.35, "rgba(40, 34, 28, " + (0.114 * boost) + ")");
+      well.addColorStop(0.7, "rgba(60, 52, 42, 0.033)");
       well.addColorStop(1, "rgba(244, 239, 230, 0)");
       ctx.fillStyle = well;
+      ctx.fillRect(0, 0, w, h);
+
+      ctx.globalCompositeOperation = "source-over";
+      const core = ctx.createRadialGradient(bx, by, 0, bx, by, 31.5 * boost);
+      core.addColorStop(0, "rgba(10, 9, 8, " + (0.358 * boost) + ")");
+      core.addColorStop(0.55, "rgba(20, 18, 16, 0.13)");
+      core.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.fillStyle = core;
       ctx.beginPath();
-      ctx.arc(bx, by, R, 0, Math.PI * 2);
+      ctx.arc(bx, by, 31.5 * boost, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.strokeStyle = "rgba(40, 36, 32, " + (0.22 * boost) + ")";
+      ctx.strokeStyle = "rgba(40, 36, 32, " + (0.18 * boost) + ")";
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.ellipse(bx, by, 43.5 * boost, 13.5 * boost, 0.35, 0, Math.PI * 2);
       ctx.stroke();
-      ctx.strokeStyle = "rgba(55, 48, 40, " + (0.14 * boost) + ")";
+      ctx.strokeStyle = "rgba(55, 48, 40, " + (0.1 * boost) + ")";
       ctx.beginPath();
       ctx.ellipse(bx, by, 58.5 * boost, 18 * boost, -0.2, 0, Math.PI * 2);
       ctx.stroke();
