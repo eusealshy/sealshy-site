@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
   <title>Who am i?</title>
   <meta name="description" content="Who am i?" />
   <meta name="theme-color" content="#f4efe6" />
@@ -15,7 +15,7 @@
   <style>
     :root { --bg: #f4efe6; --ink: #1a1814; }
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; outline: none; }
-    html, body { height: 100%; }
+    html, body { height: 100%; touch-action: none; }
     body {
       font-family: Inter, system-ui, sans-serif;
       background: var(--bg);
@@ -25,6 +25,8 @@
       touch-action: none;
       user-select: none;
       -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      overscroll-behavior: none;
     }
     canvas#draw, canvas#fx {
       position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none;
@@ -66,10 +68,7 @@
       contain: strict;
       opacity: 0;
     }
-    @media (hover: none) {
-      body { cursor: auto; }
-      .cursor, canvas#fx { display: none; }
-    }
+
   </style>
 </head>
 <body>
@@ -219,6 +218,7 @@
     addEventListener("pointerdown", (e) => {
       if (overLink(e.target)) return;
       e.preventDefault();
+      try { document.body.setPointerCapture(e.pointerId); } catch (_) {}
       if (!pointerLive) {
         pointerLive = true;
         cursorEl.style.opacity = "1";
