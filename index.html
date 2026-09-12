@@ -33,6 +33,8 @@
     }
     canvas#draw { z-index: 1; }
     canvas#fx { z-index: 2; }
+    /* ensure wash sits under canvases */
+
     .stage {
       position: relative; z-index: 3; min-height: 100%;
       display: grid; place-items: center; padding: 2rem; text-align: center;
@@ -68,6 +70,73 @@
       contain: strict;
       opacity: 0;
     }
+    /* soft warm wash so beige reads (not flat white) */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        radial-gradient(ellipse 90% 70% at 50% 40%, rgba(232, 220, 200, 0.55), transparent 70%),
+        linear-gradient(180deg, #f7f2e9 0%, #f4efe6 45%, #efe6d8 100%);
+      opacity: 1;
+    }
+    .draw-toggle {
+      position: fixed;
+      top: max(0.85rem, env(safe-area-inset-top));
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.35rem 0.55rem;
+      border: none;
+      background: transparent;
+      color: var(--ink);
+      font-family: Inter, system-ui, sans-serif;
+      font-size: 0.68rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      opacity: 0.16;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: opacity 0.25s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .draw-toggle:hover,
+    .draw-toggle:focus-visible {
+      opacity: 0.45;
+    }
+    .draw-toggle .knob {
+      width: 1.55rem;
+      height: 0.85rem;
+      border-radius: 999px;
+      border: 1px solid rgba(26, 24, 20, 0.35);
+      position: relative;
+      flex-shrink: 0;
+      transition: background 0.2s ease, border-color 0.2s ease;
+    }
+    .draw-toggle .knob::after {
+      content: "";
+      position: absolute;
+      top: 1px;
+      left: 1px;
+      width: 0.6rem;
+      height: 0.6rem;
+      border-radius: 50%;
+      background: rgba(26, 24, 20, 0.4);
+      transition: transform 0.2s ease, background 0.2s ease;
+    }
+    .draw-toggle[aria-checked="true"] .knob {
+      background: rgba(26, 24, 20, 0.12);
+      border-color: rgba(26, 24, 20, 0.45);
+    }
+    .draw-toggle[aria-checked="true"] .knob::after {
+      transform: translateX(0.65rem);
+      background: rgba(26, 24, 20, 0.7);
+    }
 
   </style>
 </head>
@@ -75,6 +144,10 @@
   <canvas id="draw" aria-hidden="true"></canvas>
   <canvas id="fx" aria-hidden="true"></canvas>
   <div class="cursor" id="cursor" aria-hidden="true"></div>
+  <button type="button" class="draw-toggle" id="drawToggle" role="switch" aria-checked="true" title="Draw">
+    <span>Draw</span>
+    <span class="knob" aria-hidden="true"></span>
+  </button>
   <main class="stage">
     <div class="card">
       <h1 id="title" aria-label="SEALSHY"></h1>
@@ -92,9 +165,11 @@
     const cursorEl = document.getElementById("cursor");
     const title = document.getElementById("title");
     const links = [...document.querySelectorAll("nav a")];
-    const PEN = "rgba(20, 18, 16, 0.85)";
-    const LINE_W = 2.1;
+    const PEN = "rgba(26, 24, 20, 0.72)";
+    const LINE_W = 1.65;
     const INK_LAG = 0.1;
+    let drawEnabled = true;
+    let dprDraw = 1;
     const RELEASE_LAG = 0.4;
     const NEAR = 200;
     const DUST = 96; // ~90% of full black-hole dust
@@ -137,12 +212,24 @@
       }
     }
 
-    function fitCanvas(c) {
-      if (c.width === w && c.height === h) return false;
-      c.width = w;
-      c.height = h;
+    function fitCanvas(c, useDpr) {
+      const dpr = useDpr ? Math.min(window.devicePixelRatio || 1, 2) : 1;
+      const bw = Math.floor(w * dpr);
+      const bh = Math.floor(h * dpr);
+      if (c.width === bw && c.height === bh) {
+        if (useDpr) dprDraw = dpr;
+        return false;
+      }
+      c.width = bw;
+      c.height = bh;
       c.style.width = w + "px";
       c.style.height = h + "px";
+      if (useDpr) {
+        dprDraw = dpr;
+        dctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      } else {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+      }
       return true;
     }
 
@@ -168,8 +255,8 @@
       w = innerWidth | 0;
       h = innerHeight | 0;
       // resizing clears draw canvas — avoids stretch bugs / temp-canvas leaks
-      fitCanvas(drawCanvas);
-      fitCanvas(canvas);
+      fitCanvas(drawCanvas, true);
+      fitCanvas(canvas, false);
       drawing = false;
       hasInk = false;
       mx = bx = w * 0.5;
@@ -193,23 +280,33 @@
     }
 
     function strokeTo(x, y) {
+      if (!drawEnabled) {
+        lastX = x;
+        lastY = y;
+        return;
+      }
       const dx = x - lastX;
       const dy = y - lastY;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 0.35) return;
-      // jump instead of drawing a screen-wide bug line
+      if (dist < 0.25) return;
       if (dist > MAX_SEG) {
         lastX = x;
         lastY = y;
         return;
       }
       dctx.strokeStyle = PEN;
-      dctx.lineWidth = LINE_W;
+      // pressure-ish: slightly thicker when slow
+      dctx.lineWidth = LINE_W * (dist < 2.5 ? 1.15 : dist > 12 ? 0.9 : 1);
       dctx.lineCap = "round";
       dctx.lineJoin = "round";
+      dctx.miterLimit = 1;
       dctx.beginPath();
       dctx.moveTo(lastX, lastY);
-      dctx.lineTo(x, y);
+      // quadratic mid-point smooth
+      const mx2 = (lastX + x) / 2;
+      const my2 = (lastY + y) / 2;
+      dctx.quadraticCurveTo(lastX, lastY, mx2, my2);
+      dctx.quadraticCurveTo(mx2, my2, x, y);
       dctx.stroke();
       lastX = x;
       lastY = y;
@@ -224,19 +321,21 @@
         cursorEl.style.opacity = "1";
         initDust();
       }
-      drawing = true;
+      drawing = drawEnabled;
       mx = bx = e.clientX;
       my = by = e.clientY;
       inkX = lastX = mx;
       inkY = lastY = my;
-      hasInk = true;
+      hasInk = drawEnabled;
       moving = true;
       lastMove = performance.now();
       cursorEl.style.transform = "translate3d(" + mx + "px," + my + "px,0) translate(-50%,-50%)";
-      dctx.fillStyle = PEN;
-      dctx.beginPath();
-      dctx.arc(lastX, lastY, LINE_W * 0.5, 0, Math.PI * 2);
-      dctx.fill();
+      if (drawEnabled) {
+        dctx.fillStyle = PEN;
+        dctx.beginPath();
+        dctx.arc(lastX, lastY, LINE_W * 0.45, 0, Math.PI * 2);
+        dctx.fill();
+      }
     });
     addEventListener("pointerup", () => { drawing = false; hasInk = false; });
     addEventListener("pointercancel", () => { drawing = false; hasInk = false; });
@@ -277,7 +376,21 @@
     function frame(ts) {
       raf = 0;
       if (!visible) return;
-      raf = requestAnimationFrame(frame);
+      const drawToggle = document.getElementById("drawToggle");
+    drawToggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      drawEnabled = !drawEnabled;
+      drawToggle.setAttribute("aria-checked", drawEnabled ? "true" : "false");
+      if (!drawEnabled) {
+        drawing = false;
+        hasInk = false;
+      }
+    });
+    // don't start page draw when toggling
+    drawToggle.addEventListener("pointerdown", (e) => e.stopPropagation());
+
+    raf = requestAnimationFrame(frame);
 
       if (!lastTs) lastTs = ts;
       const dt = Math.min(0.033, (ts - lastTs) / 1000);
@@ -453,6 +566,20 @@
           "translate3d(" + ((dx / dist) * force).toFixed(2) + "px," + ((dy / dist) * force).toFixed(2) + "px,0)";
       }
     }
+
+    const drawToggle = document.getElementById("drawToggle");
+    drawToggle.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      drawEnabled = !drawEnabled;
+      drawToggle.setAttribute("aria-checked", drawEnabled ? "true" : "false");
+      if (!drawEnabled) {
+        drawing = false;
+        hasInk = false;
+      }
+    });
+    // don't start page draw when toggling
+    drawToggle.addEventListener("pointerdown", (e) => e.stopPropagation());
 
     raf = requestAnimationFrame(frame);
   </script>
