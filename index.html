@@ -302,11 +302,7 @@
       dctx.miterLimit = 1;
       dctx.beginPath();
       dctx.moveTo(lastX, lastY);
-      // quadratic mid-point smooth
-      const mx2 = (lastX + x) / 2;
-      const my2 = (lastY + y) / 2;
-      dctx.quadraticCurveTo(lastX, lastY, mx2, my2);
-      dctx.quadraticCurveTo(mx2, my2, x, y);
+      dctx.lineTo(x, y);
       dctx.stroke();
       lastX = x;
       lastY = y;
