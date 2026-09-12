@@ -44,18 +44,13 @@
       justify-content: center;
       pointer-events: none;
     }
-    h1 .ch {
-      display: inline-block;
-      transform: translate3d(0,0,0);
-      will-change: transform, opacity;
-    }
+    h1 .ch { display: inline-block; transform: translate3d(0,0,0); }
     nav { display: flex; gap: 1.75rem; pointer-events: auto; }
     nav a {
       color: var(--ink); text-decoration: none; font-size: 0.8rem;
       letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500;
       opacity: 0.55; border-bottom: 1px solid transparent; padding-bottom: 2px;
-      cursor: none; outline: none;
-      transform: translate3d(0,0,0);
+      cursor: none; outline: none; transform: translate3d(0,0,0);
     }
     nav a:hover, nav a:focus, nav a:active {
       opacity: 1; border-bottom-color: var(--ink); outline: none; background: transparent;
@@ -64,7 +59,8 @@
       position: fixed; width: 8px; height: 8px; border-radius: 50%;
       background: rgba(20, 18, 16, 0.45);
       transform: translate3d(-50%, -50%, 0);
-      pointer-events: none; z-index: 10; left: -100px; top: -100px;
+      pointer-events: none; z-index: 10; left: 0; top: 0;
+      contain: strict;
     }
     @media (hover: none) {
       body { cursor: auto; }
@@ -87,9 +83,9 @@
   </main>
   <script>
     const drawCanvas = document.getElementById("draw");
-    const dctx = drawCanvas.getContext("2d", { alpha: true });
+    const dctx = drawCanvas.getContext("2d", { alpha: true, desynchronized: true });
     const canvas = document.getElementById("fx");
-    const ctx = canvas.getContext("2d", { alpha: true });
+    const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
     const cursorEl = document.getElementById("cursor");
     const title = document.getElementById("title");
     const links = [...document.querySelectorAll("nav a")];
@@ -98,7 +94,8 @@
     const INK_LAG = 0.1;
     const RELEASE_LAG = 0.4;
     const NEAR = 200;
-    const DUST = 18;
+    const DUST = 16;
+    const MAX_SEG = 48; // never draw a giant trail line
 
     "SEALSHY".split("").forEach((c) => {
       const s = document.createElement("span");
@@ -113,71 +110,78 @@
     let hot = 0;
     let drawing = false, hasInk = false;
     let inkX = 0, inkY = 0, lastX = 0, lastY = 0;
-    const dust = [];
-    const home = []; // fixed slot per letter
-    const smoothN = new Array(chars.length).fill(0);
-    const linkN = new Array(links.length).fill(0);
+    const dust = new Float32Array(DUST * 5); // x,y,vx,vy,life packed — less GC
+    const home = new Array(chars.length);
+    const smoothN = new Float32Array(chars.length);
+    const linkN = new Float32Array(links.length);
+    let linkHome = new Array(links.length);
     let lastTs = 0;
-    let linkHome = [];
+    let raf = 0;
+    let visible = true;
+    let moving = false;
+    let lastMove = 0;
+    let needsLetterReset = false;
 
-    function sizeCanvas(c, cctx, keep) {
-      let saved = null;
-      if (keep && c.width) {
-        saved = document.createElement("canvas");
-        saved.width = c.width;
-        saved.height = c.height;
-        saved.getContext("2d").drawImage(c, 0, 0);
+    function initDust() {
+      for (let i = 0; i < DUST; i++) {
+        const o = i * 5;
+        dust[o] = Math.random() * w;
+        dust[o + 1] = Math.random() * h;
+        dust[o + 2] = 0;
+        dust[o + 3] = 0;
+        dust[o + 4] = 0.45 + Math.random() * 0.55;
       }
-      // dpr 1 = much lighter
+    }
+
+    function fitCanvas(c) {
+      if (c.width === w && c.height === h) return false;
       c.width = w;
       c.height = h;
       c.style.width = w + "px";
       c.style.height = h + "px";
-      cctx.setTransform(1, 0, 0, 1, 0, 0);
-      if (saved) cctx.drawImage(saved, 0, 0, w, h);
-    }
-
-    function seedDust() {
-      dust.length = 0;
-      for (let i = 0; i < DUST; i++) {
-        dust.push({
-          x: Math.random() * w,
-          y: Math.random() * h,
-          vx: 0, vy: 0,
-          life: 0.45 + Math.random() * 0.55,
-          size: 1 + (i % 2),
-        });
-      }
+      return true;
     }
 
     function cacheHomes() {
-      chars.forEach((el) => { el.style.transform = "translate3d(0,0,0)"; el.style.opacity = "1"; });
+      chars.forEach((el) => {
+        el.style.transform = "translate3d(0,0,0)";
+        el.style.opacity = "1";
+      });
       links.forEach((el) => { el.style.transform = "translate3d(0,0,0)"; });
       void title.offsetWidth;
-      home.length = 0;
-      chars.forEach((el) => {
+      chars.forEach((el, i) => {
         const r = el.getBoundingClientRect();
-        home.push({ x: r.left + r.width / 2, y: r.top + r.height / 2, half: Math.max(6, r.width * 0.5) });
+        home[i] = { x: r.left + r.width / 2, y: r.top + r.height / 2, half: Math.max(6, r.width * 0.5) };
       });
-      linkHome = links.map((el) => {
+      links.forEach((el, i) => {
         const r = el.getBoundingClientRect();
-        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        linkHome[i] = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
       });
+      needsLetterReset = false;
     }
 
     function resize() {
-      w = innerWidth;
-      h = innerHeight;
-      sizeCanvas(drawCanvas, dctx, true);
-      sizeCanvas(canvas, ctx, false);
-      mx = bx = w / 2;
-      my = by = h / 2;
-      seedDust();
+      w = innerWidth | 0;
+      h = innerHeight | 0;
+      // resizing clears draw canvas — avoids stretch bugs / temp-canvas leaks
+      fitCanvas(drawCanvas);
+      fitCanvas(canvas);
+      drawing = false;
+      hasInk = false;
+      mx = bx = w * 0.5;
+      my = by = h * 0.5;
+      lastX = inkX = mx;
+      lastY = inkY = my;
+      initDust();
       cacheHomes();
     }
 
     resize();
-    addEventListener("resize", () => setTimeout(resize, 50));
+    let resizeTimer = 0;
+    addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(resize, 80);
+    });
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(cacheHomes);
 
     function overLink(el) {
@@ -185,6 +189,16 @@
     }
 
     function strokeTo(x, y) {
+      const dx = x - lastX;
+      const dy = y - lastY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 0.35) return;
+      // jump instead of drawing a screen-wide bug line
+      if (dist > MAX_SEG) {
+        lastX = x;
+        lastY = y;
+        return;
+      }
       dctx.strokeStyle = PEN;
       dctx.lineWidth = LINE_W;
       dctx.lineCap = "round";
@@ -201,9 +215,13 @@
       if (overLink(e.target)) return;
       e.preventDefault();
       drawing = true;
-      inkX = lastX = mx = e.clientX;
-      inkY = lastY = my = e.clientY;
+      mx = e.clientX;
+      my = e.clientY;
+      inkX = lastX = mx;
+      inkY = lastY = my;
       hasInk = true;
+      moving = true;
+      lastMove = performance.now();
       dctx.fillStyle = PEN;
       dctx.beginPath();
       dctx.arc(lastX, lastY, LINE_W * 0.5, 0, Math.PI * 2);
@@ -214,6 +232,8 @@
     addEventListener("pointermove", (e) => {
       mx = e.clientX;
       my = e.clientY;
+      moving = true;
+      lastMove = performance.now();
       cursorEl.style.transform = "translate3d(" + mx + "px," + my + "px,0) translate(-50%,-50%)";
     });
 
@@ -223,35 +243,54 @@
       a.addEventListener("focus", (e) => e.target.blur());
     });
 
+    document.addEventListener("visibilitychange", () => {
+      visible = document.visibilityState === "visible";
+      if (visible && !raf) raf = requestAnimationFrame(frame);
+    });
+
     function nearFactor(dist) {
       return dist >= NEAR ? 0 : 1 - dist / NEAR;
     }
 
     function frame(ts) {
+      raf = 0;
+      if (!visible) return;
+      raf = requestAnimationFrame(frame);
+
       if (!lastTs) lastTs = ts;
       const dt = Math.min(0.033, (ts - lastTs) / 1000);
       lastTs = ts;
+
+      const idle = !drawing && (ts - lastMove > 120);
+      if (idle) moving = false;
 
       bx += (mx - bx) * 0.14;
       by += (my - by) * 0.14;
 
       if (drawing && hasInk) {
         const k = 1 - Math.exp(-dt / INK_LAG);
-        inkX += (mx - inkX) * k;
-        inkY += (my - inkY) * k;
-        if ((inkX - lastX) * (inkX - lastX) + (inkY - lastY) * (inkY - lastY) > 0.25) {
-          strokeTo(inkX, inkY);
+        const nx = inkX + (mx - inkX) * k;
+        const ny = inkY + (my - inkY) * k;
+        // step in small segments so lag never paints a long slash
+        let sx = inkX, sy = inkY;
+        const tdx = nx - sx, tdy = ny - sy;
+        const td = Math.sqrt(tdx * tdx + tdy * tdy);
+        if (td > 0.35) {
+          const steps = Math.max(1, Math.ceil(td / MAX_SEG));
+          for (let s = 1; s <= steps; s++) {
+            const px = sx + (tdx * s) / steps;
+            const py = sy + (tdy * s) / steps;
+            strokeTo(px, py);
+          }
         }
+        inkX = nx;
+        inkY = ny;
       }
 
-      // clear only a padded region around cursor (cheaper than full clear on big screens)
       ctx.clearRect(0, 0, w, h);
 
       const boost = hot ? 1.12 : 1;
       const R = 170 * boost;
-
-      // small well only (no full-screen multiply fill)
-      const coreR = 26 * boost;
       const g = ctx.createRadialGradient(bx, by, 0, bx, by, R);
       g.addColorStop(0, "rgba(18,16,14," + (0.14 * boost) + ")");
       g.addColorStop(0.45, "rgba(40,34,28," + (0.06 * boost) + ")");
@@ -261,6 +300,7 @@
       ctx.arc(bx, by, R, 0, Math.PI * 2);
       ctx.fill();
 
+      const coreR = 26 * boost;
       const core = ctx.createRadialGradient(bx, by, 0, bx, by, coreR);
       core.addColorStop(0, "rgba(10,9,8,0.45)");
       core.addColorStop(1, "rgba(0,0,0,0)");
@@ -278,35 +318,38 @@
       ctx.ellipse(bx, by, 50 * boost, 15 * boost, -0.2, 0, Math.PI * 2);
       ctx.stroke();
 
-      // few particles
-      for (let i = 0; i < DUST; i++) {
-        const p = dust[i];
-        const dx = bx - p.x;
-        const dy = by - p.y;
-        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-        const pull = 0.035 * (60 / Math.max(dist, 20));
-        p.vx = (p.vx + (dx / dist) * pull) * 0.95;
-        p.vy = (p.vy + (dy / dist) * pull) * 0.95;
-        p.x += p.vx;
-        p.y += p.vy;
-        if (dist < 10) {
-          const a = Math.random() * Math.PI * 2;
-          const rr = 100 + Math.random() * 140;
-          p.x = bx + Math.cos(a) * rr;
-          p.y = by + Math.sin(a) * rr;
-          p.vx = p.vy = 0;
-        }
-        const a = (1 - Math.min(dist, 180) / 180) * 0.35 * p.life;
-        if (a > 0.02) {
-          ctx.fillStyle = "rgba(28,24,20," + a + ")";
-          ctx.fillRect(p.x, p.y, p.size, p.size);
+      // particles only while active (saves CPU when idle)
+      if (!idle || hot) {
+        for (let i = 0; i < DUST; i++) {
+          const o = i * 5;
+          let x = dust[o], y = dust[o + 1], vx = dust[o + 2], vy = dust[o + 3];
+          const life = dust[o + 4];
+          const dx = bx - x;
+          const dy = by - y;
+          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+          const pull = 0.035 * (60 / Math.max(dist, 20));
+          vx = (vx + (dx / dist) * pull) * 0.95;
+          vy = (vy + (dy / dist) * pull) * 0.95;
+          x += vx;
+          y += vy;
+          if (dist < 10) {
+            const a = Math.random() * Math.PI * 2;
+            const rr = 100 + Math.random() * 140;
+            x = bx + Math.cos(a) * rr;
+            y = by + Math.sin(a) * rr;
+            vx = vy = 0;
+          }
+          dust[o] = x; dust[o + 1] = y; dust[o + 2] = vx; dust[o + 3] = vy;
+          const a = (1 - Math.min(dist, 180) / 180) * 0.35 * life;
+          if (a > 0.02) {
+            ctx.fillStyle = "rgba(28,24,20," + a + ")";
+            ctx.fillRect(x, y, 1 + (i & 1), 1 + (i & 1));
+          }
         }
       }
 
-      // letters: suck toward ball but NEVER leave their slot enough to stack
-      // max drift = 35% of distance to neighbor — cursor in the middle can't collapse them
-      let maxN = 0;
-      const now = performance.now() * 0.001;
+      const now = ts * 0.001;
+      let anySuck = false;
       for (let i = 0; i < chars.length; i++) {
         const h0 = home[i];
         if (!h0) continue;
@@ -319,17 +362,20 @@
         else n += (target - n) * (1 - Math.exp(-dt / RELEASE_LAG));
         if (n < 0.001) n = 0;
         smoothN[i] = n;
-        if (n > maxN) maxN = n;
+        if (n > 0.002) anySuck = true;
+
+        if (n === 0 && !needsLetterReset) {
+          // already at rest — skip DOM write
+          continue;
+        }
 
         const leftGap = i > 0 ? h0.x - home[i - 1].x : h0.half * 2;
         const rightGap = i < home.length - 1 ? home[i + 1].x - h0.x : h0.half * 2;
         const maxDriftX = Math.min(leftGap, rightGap) * 0.35;
         const maxDriftY = 22;
 
-        // desired pull
         let ox = (dx / dist) * (n * n * 26 + n * 6);
         let oy = (dy / dist) * (n * n * 26 + n * 6);
-        // hard clamp to slot — this is what stops mid-letter stacking
         if (ox > maxDriftX) ox = maxDriftX;
         if (ox < -maxDriftX) ox = -maxDriftX;
         if (oy > maxDriftY) oy = maxDriftY;
@@ -341,11 +387,18 @@
         const shy = shake ? Math.cos(now * 60 + i * 1.3) * shake * 0.8 : 0;
         const rot = n * Math.sin(now * 40 + i) * 1.4;
 
-        chars[i].style.transform =
-          "translate3d(" + (ox + shx).toFixed(2) + "px," + (oy + shy).toFixed(2) + "px,0) " +
-          "scale(" + zoom.toFixed(3) + ") rotate(" + rot.toFixed(2) + "deg)";
-        chars[i].style.opacity = (Math.max(0.6, 1 - n * 0.35)).toFixed(3);
+        if (n === 0) {
+          chars[i].style.transform = "translate3d(0,0,0)";
+          chars[i].style.opacity = "1";
+        } else {
+          chars[i].style.transform =
+            "translate3d(" + (ox + shx).toFixed(2) + "px," + (oy + shy).toFixed(2) + "px,0) " +
+            "scale(" + zoom.toFixed(3) + ") rotate(" + rot.toFixed(2) + "deg)";
+          chars[i].style.opacity = (Math.max(0.6, 1 - n * 0.35)).toFixed(3);
+        }
       }
+      if (!anySuck) needsLetterReset = false;
+      else needsLetterReset = true;
 
       for (let i = 0; i < links.length; i++) {
         const h0 = linkHome[i];
@@ -359,14 +412,17 @@
         else n += (target - n) * (1 - Math.exp(-dt / RELEASE_LAG));
         if (n < 0.001) n = 0;
         linkN[i] = n;
+        if (n === 0) {
+          links[i].style.transform = "translate3d(0,0,0)";
+          continue;
+        }
         const force = n * n * 10;
         links[i].style.transform =
           "translate3d(" + ((dx / dist) * force).toFixed(2) + "px," + ((dy / dist) * force).toFixed(2) + "px,0)";
       }
-
-      requestAnimationFrame(frame);
     }
-    requestAnimationFrame(frame);
+
+    raf = requestAnimationFrame(frame);
   </script>
 </body>
 </html>
