@@ -14,7 +14,7 @@
       --bg: #f4efe6;
       --ink: #1a1814;
       --muted: #6b645a;
-      --pen: rgba(20, 18, 16, 0.45);
+      --pen: rgba(20, 18, 16, 0.85);
     }
     * {
       box-sizing: border-box;
@@ -140,7 +140,7 @@
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: var(--pen);
+      background: rgba(20, 18, 16, 0.45);
       transform: translate(-50%, -50%);
       pointer-events: none;
       z-index: 10;
@@ -176,7 +176,7 @@
     const card = document.getElementById("card");
     const title = document.getElementById("title");
     const links = [...document.querySelectorAll("nav a")];
-    const PEN = "rgba(20, 18, 16, 0.45)";
+    const PEN = "rgba(20, 18, 16, 0.85)";
     const LINE_W = 2.1; // +5% over 2.0
     const INK_LAG = 0.15;
 
@@ -460,7 +460,7 @@
 
       ctx.globalCompositeOperation = "source-over";
       const core = ctx.createRadialGradient(bx, by, 0, bx, by, 31.5 * boost);
-      core.addColorStop(0, "rgba(10, 9, 8, " + (0.55 * boost) + ")");
+      core.addColorStop(0, "rgba(10, 9, 8, " + (0.45 * boost) + ")");
       core.addColorStop(0.55, "rgba(20, 18, 16, 0.2)");
       core.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = core;
