@@ -207,20 +207,33 @@
       });
     });
 
+    const basePos = new Map();
+    function cacheBases() {
+      pullables.forEach((el) => {
+        el.style.transform = "none";
+        const r = el.getBoundingClientRect();
+        basePos.set(el, { x: r.left + r.width / 2, y: r.top + r.height / 2 });
+      });
+    }
+    cacheBases();
+    window.addEventListener("resize", () => setTimeout(cacheBases, 50));
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(cacheBases);
+    }
+
     function pullElement(el, strength) {
-      const r = el.getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
-      const dx = bx - cx;
-      const dy = by - cy;
+      const base = basePos.get(el);
+      if (!base) return;
+      const dx = bx - base.x;
+      const dy = by - base.y;
       const dist = Math.hypot(dx, dy) || 1;
-      // gentle suck only when near
-      const reach = 280;
+      // whole-screen soft falloff; strength already +25%
+      const reach = Math.hypot(w, h) || 1;
       const t = Math.max(0, 1 - dist / reach);
-      const force = t * t * strength * (hot ? 1.25 : 1);
+      const force = t * strength * (hot ? 1.25 : 1);
       const ox = (dx / dist) * force;
       const oy = (dy / dist) * force;
-      const scale = 1 - t * 0.018 * (hot ? 1.4 : 1);
+      const scale = 1 - t * 0.022 * (hot ? 1.4 : 1);
       el.style.transform =
         "translate(" + ox.toFixed(2) + "px," + oy.toFixed(2) + "px) scale(" + scale.toFixed(4) + ")";
     }
@@ -232,13 +245,13 @@
       ctx.clearRect(0, 0, w, h);
 
       const boost = hot ? 1.2 : 1;
-      const R = 220 * boost;
+      const R = 275 * boost;
 
       // soft vignette well — muted brown/black, not neon
       ctx.globalCompositeOperation = "multiply";
       const well = ctx.createRadialGradient(bx, by, 0, bx, by, R);
-      well.addColorStop(0, "rgba(18, 16, 14, " + (0.22 * boost) + ")");
-      well.addColorStop(0.35, "rgba(40, 34, 28, " + (0.14 * boost) + ")");
+      well.addColorStop(0, "rgba(18, 16, 14, " + (0.275 * boost) + ")");
+      well.addColorStop(0.35, "rgba(40, 34, 28, " + (0.175 * boost) + ")");
       well.addColorStop(0.7, "rgba(60, 52, 42, 0.05)");
       well.addColorStop(1, "rgba(244, 239, 230, 0)");
       ctx.fillStyle = well;
@@ -272,7 +285,7 @@
         const dx = bx - p.x;
         const dy = by - p.y;
         const dist = Math.hypot(dx, dy) || 1;
-        const pull = (hot ? 0.055 : 0.035) * (80 / Math.max(dist, 28));
+        const pull = (hot ? 0.069 : 0.044) * (80 / Math.max(dist, 28));
         p.vx += (dx / dist) * pull;
         p.vy += (dy / dist) * pull;
         // slight orbital drag so it spirals
@@ -300,7 +313,7 @@
 
       // gentle gravitational pull on copy
       pullables.forEach((el, i) => {
-        const strength = i === 0 ? 14 : 9;
+        const strength = i === 0 ? 17.5 : 11.25;
         pullElement(el, strength);
       });
 
