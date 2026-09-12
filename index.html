@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-build="1789182345">
+<html lang="en" data-build="1789182481">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
@@ -312,27 +312,35 @@
       if (overLink(e.target)) return;
       if (e.target.closest && e.target.closest("#drawToggle")) return;
       e.preventDefault();
-      try { document.body.setPointerCapture(e.pointerId); } catch (_) {}
+      mx = e.clientX;
+      my = e.clientY;
       if (!pointerLive) {
+        // first contact: place hole once, then lag follows
         pointerLive = true;
+        bx = mx;
+        by = my;
+        inkX = lastX = mx;
+        inkY = lastY = my;
         cursorEl.style.opacity = "1";
         initDust();
       }
-      drawing = drawEnabled;
-      mx = bx = e.clientX;
-      my = by = e.clientY;
-      inkX = lastX = mx;
-      inkY = lastY = my;
-      hasInk = drawEnabled;
-      moving = true;
-      lastMove = performance.now();
-      cursorEl.style.transform = "translate3d(" + mx + "px," + my + "px,0) translate(-50%,-50%)";
+      // never snap bx/by on later clicks — that teleports the ball
+      drawing = false;
+      hasInk = false;
       if (drawEnabled) {
+        try { document.body.setPointerCapture(e.pointerId); } catch (_) {}
+        drawing = true;
+        hasInk = true;
+        inkX = lastX = mx;
+        inkY = lastY = my;
         dctx.fillStyle = PEN;
         dctx.beginPath();
         dctx.arc(lastX, lastY, LINE_W * 0.45, 0, Math.PI * 2);
         dctx.fill();
       }
+      moving = true;
+      lastMove = performance.now();
+      cursorEl.style.transform = "translate3d(" + mx + "px," + my + "px,0) translate(-50%,-50%)";
     });
     addEventListener("pointerup", () => { drawing = false; hasInk = false; });
     addEventListener("pointercancel", () => { drawing = false; hasInk = false; });
