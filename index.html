@@ -354,50 +354,56 @@
       const dist = Math.hypot(dx, dy) || 1;
       const reach = Math.hypot(w, h) || 1;
       const t = Math.max(0, 1 - dist / reach);
-      const force = t * 17.5 * (hot ? 1.25 : 1);
+      const nTitle = nearFactor(dist);
+      const force = t * 26 * (hot ? 1.25 : 1); // stronger whole-word suck
       const ox = (dx / dist) * force;
       const oy = (dy / dist) * force;
+      const zoomKick = nTitle * nTitle * 14;
+      const zx = ox + (dx / dist) * zoomKick;
+      const zy = oy + (dy / dist) * zoomKick;
+      const scale = 1 - nTitle * 0.06;
       title.style.transform =
-        "translate(" + ox.toFixed(2) + "px," + oy.toFixed(2) + "px)";
+        "translate(" + zx.toFixed(2) + "px," + zy.toFixed(2) + "px) scale(" + scale.toFixed(4) + ")";
     }
 
-    // Per-letter: decay/shake/zoom only — NO big lateral pull (avoids overlap)
+    // Per-letter: shared hole vector (same for all) + zoom/blur/shake — no relative X drift
     function decayLetter(el, index, dt) {
       const base = basePos.get(el);
       if (!base) return 0;
-      const dx = bx - base.x;
-      const dy = by - base.y;
+      const tb = basePos.get(title) || base;
+      // use title center so every letter gets the SAME pull vector → no overlap
+      const dx = bx - tb.x;
+      const dy = by - tb.y;
       const dist = Math.hypot(dx, dy) || 1;
-      const n = smoothNear(el, nearFactor(dist), dt);
+      const n = smoothNear(el, nearFactor(Math.hypot(bx - base.x, by - base.y) || 1), dt);
 
-      const blur = n * 1.55;
-      const darken = n * 0.36;
-      const opac = 1 - n * 0.38;
-      const zoom = 1 - n * 0.14;
-      // tiny toward-hole only on Y-ish scale, keep X spacing intact
-      const local = n * n * 4;
-      const lx = (dx / dist) * local * 0.25; // was huge before — capped
+      const blur = n * 1.7;
+      const darken = n * 0.4;
+      const opac = 1 - n * 0.4;
+      const zoom = 1 - n * 0.22; // stronger "into hole" zoom
+      const local = n * n * 12;
+      const lx = (dx / dist) * local;
       const ly = (dy / dist) * local;
 
-      const shakeAmp = n * n * 1.6;
+      const shakeAmp = n * n * 1.2; // was 1.6 (−25%)
       const now = performance.now();
       const shx = Math.sin(now * 0.05 + index * 1.7) * shakeAmp;
       const shy = Math.cos(now * 0.062 + index * 1.3) * shakeAmp * 0.8;
-      const rot = Math.sin(now * 0.04 + index) * n * 2.5;
+      const rot = Math.sin(now * 0.04 + index) * n * 1.875; // −25%
 
       el.style.transform =
         "translate(" + (lx + shx).toFixed(2) + "px," + (ly + shy).toFixed(2) + "px) " +
         "scale(" + zoom.toFixed(4) + ") rotate(" + rot.toFixed(2) + "deg)";
       el.style.filter =
         "blur(" + blur.toFixed(2) + "px) brightness(" + (1 - darken).toFixed(3) + ") contrast(" +
-        (1 + n * 0.22).toFixed(3) + ")";
-      el.style.opacity = Math.max(0.62, opac).toFixed(3);
+        (1 + n * 0.25).toFixed(3) + ")";
+      el.style.opacity = Math.max(0.58, opac).toFixed(3);
       if (n > 0.05) {
-        const sh = (n * 2.4).toFixed(1);
+        const sh = (n * 2.6).toFixed(1);
         el.style.textShadow =
-          sh + "px 0 0 rgba(40,34,28," + (0.2 * n).toFixed(2) + "), " +
-          "-" + sh + "px 0 0 rgba(20,18,16," + (0.16 * n).toFixed(2) + "), " +
-          "0 0 " + (n * 12).toFixed(1) + "px rgba(0,0,0," + (0.25 * n).toFixed(2) + ")";
+          sh + "px 0 0 rgba(40,34,28," + (0.22 * n).toFixed(2) + "), " +
+          "-" + sh + "px 0 0 rgba(20,18,16," + (0.18 * n).toFixed(2) + "), " +
+          "0 0 " + (n * 14).toFixed(1) + "px rgba(0,0,0," + (0.28 * n).toFixed(2) + ")";
       } else {
         el.style.textShadow = "none";
       }
@@ -449,20 +455,20 @@
       const boost = hot ? 1.2 : 1;
       const R = 206 * boost;
 
-      // dark well restored at 65% strength (35% lighter)
+      // dark well at 55% strength (45% lighter than original)
       ctx.globalCompositeOperation = "multiply";
       const well = ctx.createRadialGradient(bx, by, 0, bx, by, R);
-      well.addColorStop(0, "rgba(18, 16, 14, " + (0.179 * boost) + ")");
-      well.addColorStop(0.35, "rgba(40, 34, 28, " + (0.114 * boost) + ")");
-      well.addColorStop(0.7, "rgba(60, 52, 42, 0.033)");
+      well.addColorStop(0, "rgba(18, 16, 14, " + (0.151 * boost) + ")");
+      well.addColorStop(0.35, "rgba(40, 34, 28, " + (0.096 * boost) + ")");
+      well.addColorStop(0.7, "rgba(60, 52, 42, 0.028)");
       well.addColorStop(1, "rgba(244, 239, 230, 0)");
       ctx.fillStyle = well;
       ctx.fillRect(0, 0, w, h);
 
       ctx.globalCompositeOperation = "source-over";
       const core = ctx.createRadialGradient(bx, by, 0, bx, by, 31.5 * boost);
-      core.addColorStop(0, "rgba(10, 9, 8, " + (0.358 * boost) + ")");
-      core.addColorStop(0.55, "rgba(20, 18, 16, 0.13)");
+      core.addColorStop(0, "rgba(10, 9, 8, " + (0.303 * boost) + ")");
+      core.addColorStop(0.55, "rgba(20, 18, 16, 0.11)");
       core.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = core;
       ctx.beginPath();
